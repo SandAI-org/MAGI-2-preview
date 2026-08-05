@@ -55,7 +55,7 @@
   "evaluation_config": {
     "use_magi2_refiner": true,
     "magi2_refiner_model_name": "magi2_refiner",
-    "magi2_refiner_model_path": "${MAGI2_CKPT_ROOT}/magi2_refiner",
+    "magi2_refiner_model_path": "${MAGI2_CKPT_ROOT}/refiner",
     "magi2_refiner_video_txt_guidance_scale": 2.0,
     "magi2_refiner_audio_txt_guidance_scale": 5.0,
     "magi2_refiner_noise_value": 220,
