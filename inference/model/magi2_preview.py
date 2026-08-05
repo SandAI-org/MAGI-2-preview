@@ -1473,8 +1473,6 @@ class ModalityDispatcher:
     inv_permute_mapping: torch.Tensor
 
     group_size: torch.Tensor
-    group_size_cpu: list[int]
-    group_size_cpu_tensor: torch.Tensor
     cu_group_sizes: torch.Tensor
     expert_ranges: torch.Tensor
 
@@ -1492,11 +1490,16 @@ class ModalityDispatcher:
         self.group_size = torch.bincount(
             self.permuted_modality_mapping, minlength=num_modalities
         ).to(torch.int32)
+        group_size_cpu = [int(x) for x in self.group_size.to("cpu").tolist()]
 
-        # FIXME: these two causes a lot of trouble with torch compile
-        # need to avoid using them as soon as possible, and eventually remove them
-        self.group_size_cpu_tensor = self.group_size.to("cpu")
-        self.group_size_cpu = self.group_size_cpu_tensor.tolist()
+        # Carrier tensor: shape encodes per-modality token counts.  Only the
+        # shape is ever read, so it lives on meta and owns no storage.
+        # mark_unbacked prevents Dynamo from unifying symbols when some
+        # modalities have 0 tokens (e.g. total == video when text=0).
+        self._size_carrier = torch.empty(group_size_cpu, device="meta")
+        if not torch.compiler.is_compiling():
+            for i in range(num_modalities):
+                torch._dynamo.decorators.mark_unbacked(self._size_carrier, i)
 
         self.cu_group_sizes = seqlens2cu_seqlens(self.group_size)
 
@@ -1511,6 +1514,10 @@ class ModalityDispatcher:
         self.expert_ranges = (
             torch.stack([start_indices, end_indices], dim=1).to(torch.int32).cpu()
         )
+
+    @property
+    def group_size_cpu(self) -> list[int]:
+        return [self._size_carrier.shape[i] for i in range(self.num_modalities)]
 
     def dispatch(self, x: torch.Tensor) -> list[torch.Tensor]:
         return list(torch.split(x, self.group_size_cpu, dim=0))
