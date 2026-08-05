@@ -8,9 +8,9 @@ Quick start:
         --resolution 1080p --image assets/sample_000.png \
         --prompt-file assets/sample_000.txt --output output/
 
-    # Text-to-video, 540p (inline prompt)
+    # Text-to-video, 1080p (inline prompt)
     torchrun --nproc_per_node=8 inference/pipeline/entry.py \
-        --resolution 540p --prompt "A red fox in snow" --output output/
+        --resolution 1080p --prompt "A red fox in snow" --output output/
 
     # Batch from JSON (can mix i2v and t2v):
     torchrun --nproc_per_node=8 inference/pipeline/entry.py \

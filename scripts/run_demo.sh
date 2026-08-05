@@ -2,7 +2,6 @@
 # Generate the demo batch in assets/demo_samples.json with a single model load.
 #
 #   bash scripts/run_demo.sh                       # 1080p
-#   RESOLUTION=540p bash scripts/run_demo.sh       # 540p preview only
 #   SAMPLES=my_samples.json bash scripts/run_demo.sh
 
 set -euo pipefail
