@@ -1,0 +1,8 @@
+ckpt/
+output/
+.tmp/
+*.pt
+*.ckpt
+*.safetensors
+.git/
+__pycache__/

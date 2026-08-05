@@ -70,7 +70,7 @@
       1
     ],
     "magi2_refiner_audio_noise_scale": -1.0,
-    "magi2_refiner_min_latent_frames": 63,
+    "magi2_refiner_min_latent_frames": 0,
     "magi2_refiner_data_proxy_config": {
       "t_patch_size": 1,
       "patch_size": 1,
