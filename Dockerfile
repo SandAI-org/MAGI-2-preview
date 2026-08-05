@@ -1,4 +1,4 @@
-# MAGI-2 inference image — fully self-contained, no pre-clone steps needed.
+# MAGI-2 inference image — dependencies only, mount code at runtime.
 FROM nvcr.io/nvidia/pytorch:25.10-py3
 
 ARG http_proxy
@@ -68,12 +68,9 @@ RUN pip install --no-deps nvidia-cudnn-cu13>=9.15 && \
     cp /usr/local/lib/python3.12/dist-packages/nvidia/cudnn/lib/libcudnn* /usr/lib/x86_64-linux-gnu/ && \
     ldconfig
 
-# Application code
-COPY inference /workspace/inference
-COPY configs /workspace/configs
-COPY assets /workspace/assets
-COPY scripts /workspace/scripts
-COPY README.md LICENSE requirements.txt /workspace/
+# Code is NOT baked into the image — mount it at runtime:
+#   docker run --gpus all -v /path/to/MAGI-2:/workspace ...
+# See README.md for details.
 
 ARG BUILD_INFO=unknown
 RUN printf '%s\n' "${BUILD_INFO}" > /etc/magi2-build-info

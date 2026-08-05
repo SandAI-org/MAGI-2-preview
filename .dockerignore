@@ -1,0 +1,11 @@
+# Build artifacts
+.git
+.tmp
+ckpt/
+output*/
+log_*.log
+*.mp4
+*.wav
+.cache
+__pycache__/
+*.py[cod]

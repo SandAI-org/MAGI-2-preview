@@ -14,23 +14,33 @@ optional; the preview stage alone produces 270p or 540p video.
 
 ### Docker
 
-The published image already has the dependencies built, including the ones that
-need a compiler:
+The published image contains all compiled dependencies (flash-attention,
+MagiAttention, MagiCompiler, cuDNN fix, etc.) but **not** the model code.
+Clone the repo first, then mount it into the container:
 
 ```bash
-docker pull sandai/magi2:latest
-docker run --gpus all -it -v /path/to/ckpt:/workspace/ckpt sandai/magi2:latest
+# 1. Pull the image
+docker pull sandai/magi-2-preview:latest
+
+# 2. Clone the code
+git clone https://github.com/SandAI-org/MAGI-2.git
+cd MAGI-2
+
+# 3. Run — mount code + checkpoints into /workspace
+docker run --gpus all -it --ipc=host \
+  -v $(pwd):/workspace \
+  -v /path/to/ckpt:/workspace/ckpt \
+  sandai/magi-2-preview:latest
 ```
 
-There is a tag per commit as well, `sandai/magi2:<commit>`. Name that one when
-reporting a result, because `latest` moves; the image also records what it was
-built from in `/etc/magi2-build-info`.
+There is a tag per commit as well, `sandai/magi-2-preview:<short-sha>`.
+The image records what it was built from in `/etc/magi2-build-info`.
 
-Building it yourself is only necessary to change a dependency version, or to
-work somewhere the registry is not reachable:
+Building the image yourself is only necessary to change a dependency version
+or to work somewhere the registry is not reachable:
 
 ```bash
-docker build -t magi2:local .
+docker build -t magi-2-preview:local .
 ```
 
 ### From source
@@ -50,13 +60,12 @@ root, which is gitignored:
 
 ```
 ckpt/
-├── magi2_preview/                      # preview stage: safetensors shards + index
-├── magi2_refiner/                      # refiner stage
+├── magi2_preview/                      # preview stage transformer
+├── magi2_refiner/                      # refiner stage transformer
 ├── Wan2.2-TI2V-5B/                     # video VAE
 ├── Qwen3.5-27B/                        # text encoder
-└── turbo_vae/                          # fast VAE decoder
-    ├── TurboV3-Wan22-TinyShallow_7_7.json
-    └── checkpoint-340000.ckpt
+├── turbo_vae/                          # distilled fast VAE decoder
+└── stable-audio-open-1.0/             # audio VAE (Stable Audio Open)
 ```
 
 | Directory | Contents |
@@ -66,6 +75,7 @@ ckpt/
 | `Wan2.2-TI2V-5B` | Video VAE, from [Wan-AI/Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B) |
 | `Qwen3.5-27B` | Text encoder |
 | `turbo_vae` | Distilled VAE decoder, used for decoding by default |
+| `stable-audio-open-1.0` | Audio VAE for audio decode/encode, from [Stability AI](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
 
 The configs under `configs/` reference these as `${MAGI2_CKPT_ROOT}/<name>`, and
 that variable defaults to `<repo>/ckpt`. To keep weights somewhere else, point it
@@ -95,27 +105,19 @@ Videos and a `run.log` land in `output/<task>_<resolution>_<timestamp>/`.
 
 The resolution presets are:
 
-| `RESOLUTION` | Config | Preview | Refiner |
+| `RESOLUTION` | Output (WxH) | Preview (WxH) | Refiner (WxH) |
 | --- | --- | --- | --- |
-| `270p` | `configs/magi2_preview.json` | 256x448 | off |
-| `540p` | `configs/magi2_preview.json` | 512x896 | off |
-| `1080p` | `configs/magi2_refiner.json` | 512x896 | 1088x1920 |
+| `272p` | 256x448 | 256x448 | off |
+| `540p` | 512x896 | 512x896 | off |
+| `1080p` | 1088x1920 | 512x896 | 1088x1920 |
 
-`magi2_refiner.json` extends `magi2_preview.json` and carries only what the
-refiner stage adds, so a shared setting is edited in one place.
-
-A preset name is a delivery tier, not the shape that gets generated. The VAE
-stride constrains every generated dimension to a multiple of 16, so the shape
-lands near the tier rather than on it: the `270p` tier generates 448 tall and
-`1080p` generates 1088 wide. Videos are written at that generated shape. Set
-`OUTPUT_WIDTH` and `OUTPUT_HEIGHT` to have the finished video rescaled to an exact
-size, the way the reference delivers its tiers: 270x480, 540x960 or 1080x1920.
+The VAE stride constrains generated dimensions to multiples of 16, so the
+output is 1088 wide rather than exactly 1080. To get a pixel-exact final
+size (e.g. 1920x1080), pass `--output-width 1920 --output-height 1080`.
 
 Everything else is overridable through the environment: `SECONDS_PER_VIDEO`,
 `SEED`, `GPUS_PER_NODE`, `NUM_INFERENCE_STEPS`, `OUTPUT_DIR`, and the explicit
-`PREVIEW_WIDTH` / `REFINER_WIDTH` pairs. Compilation caches are keyed on shapes
-and on deterministic mode; after changing either, rerun with `CLEAN_CACHE=true`
-so a stale kernel is not reused.
+`PREVIEW_WIDTH` / `REFINER_WIDTH` pairs. Compilation caches are keyed on shapes and deterministic mode.
 
 Three more decide where each large component sits: `MAGI2_TEXT_ENC_OFFLOAD_MODE`,
 `MAGI2_PREVIEW_OFFLOAD_MODE` and `MAGI2_REFINER_OFFLOAD_MODE`, each one of `cpu`,

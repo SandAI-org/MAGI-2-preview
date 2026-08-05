@@ -351,7 +351,7 @@ class SimplePackedData:
     def __getitem__(self, index: int) -> SingleData:
         return self.items[index]
 
-    def unpack_token_sequence(
+    def depack_token_sequence(
         self, token_sequence: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         videos, audios = [], []
@@ -608,5 +608,5 @@ class Magi2DataProxy:
         pad_size = self.get_saved_data("pad_size")
         if pad_size > 0:
             x = x[:-pad_size]
-        x_video, x_audio = packed.unpack_token_sequence(x)
+        x_video, x_audio = packed.depack_token_sequence(x)
         return x_video, x_audio

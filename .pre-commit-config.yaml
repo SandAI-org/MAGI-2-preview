@@ -1,0 +1,11 @@
+# Lightweight hooks for MAGI-2. Whole-repo formatters deferred to a dedicated style pass.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=30720]
+      - id: detect-private-key

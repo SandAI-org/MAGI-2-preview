@@ -117,7 +117,7 @@
     "cfg_rescale": 0.0,
     "use_turbo_vae": true,
     "student_config": "${MAGI2_CKPT_ROOT}/turbo_vae/TurboV3-Wan22-TinyShallow_7_7.json",
-    "student_ckpt": "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint-340000.ckpt",
+    "student_ckpt": "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint.ckpt",
     "num_inference_steps": 100,
     "data_proxy_config": {
       "t_patch_size": 1,
