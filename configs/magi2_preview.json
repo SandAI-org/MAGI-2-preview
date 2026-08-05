@@ -1,7 +1,7 @@
 {
   "engine_config": {
     "seed": 42,
-    "load": "${MAGI2_CKPT_ROOT}/magi2_preview",
+    "load": "${MAGI2_CKPT_ROOT}/preview",
     "distributed_backend": "nccl",
     "cp_size": 8,
     "ep_size": 8,
@@ -90,8 +90,8 @@
   "evaluation_config": {
     "fps": 12.5,
     "shift": 7.0,
-    "vae_model_path": "${MAGI2_CKPT_ROOT}/Wan2.2-TI2V-5B",
-    "txt_model_path": "${MAGI2_CKPT_ROOT}/Qwen3.5-27B",
+    "vae_model_path": "${MAGI2_CKPT_ROOT}/vae",
+    "txt_model_path": "${MAGI2_CKPT_ROOT}/text_encoder",
     "vae_stride": [
       8,
       16,
@@ -120,7 +120,7 @@
     "ref_image_type": "original",
     "use_turbo_vae": true,
     "student_config": "${MAGI2_CKPT_ROOT}/turbo_vae/TurboV3-Wan22-TinyShallow_7_7.json",
-    "student_ckpt": "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint-340000.ckpt",
+    "student_ckpt": "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint.ckpt",
     "num_inference_steps": 100,
     "data_proxy_config": {
       "t_patch_size": 1,

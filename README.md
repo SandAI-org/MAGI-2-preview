@@ -16,7 +16,10 @@
 Magi-2 Preview is a 114B-parameter unified audio-video generation model that
 activates just 6B parameters per token. Built on MagiMoE and co-designed across
 architecture, systems, and data, it explores an efficient path to scaling video
-generation.
+generation. The architecture, the training system built around it, and the data
+pipeline are described in [MAGI-2 Preview: Scaling Video Generation Models
+Efficiently](https://sand.ai/blog/magi-2-preview); the weights are on Hugging
+Face at [sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview).
 
 This repository is the inference code. It generates video from a text prompt
 (T2V) or from a prompt plus a still image (I2V), with sound generated alongside
@@ -36,17 +39,17 @@ that result up to 1080p.
 
 ### Docker
 
-The published image already has the dependencies built, including the ones that
-need a compiler:
+The published image, [sandai/magi-2-preview](https://hub.docker.com/r/sandai/magi-2-preview),
+already has the dependencies built, including the ones that need a compiler:
 
 ```bash
-docker pull sandai/magi2:latest
-docker run --gpus all -it -v /path/to/ckpt:/workspace/ckpt sandai/magi2:latest
+docker pull sandai/magi-2-preview:latest
+docker run --gpus all -it -v /path/to/ckpt:/workspace/ckpt sandai/magi-2-preview:latest
 ```
 
-There is a tag per commit as well, `sandai/magi2:<commit>`. Name that one when
-reporting a result, because `latest` moves; the image also records what it was
-built from in `/etc/magi2-build-info`.
+There is a tag per commit as well, `sandai/magi-2-preview:<commit>`. Name that
+one when reporting a result, because `latest` moves; the image also records what
+it was built from in `/etc/magi2-build-info`.
 
 Building it yourself is only necessary to change a dependency version, or to
 work somewhere the registry is not reachable:
@@ -62,36 +65,50 @@ pip install -r requirements.txt
 ```
 
 MAGI-2 also needs [MagiAttention](https://github.com/SandAI-org/MagiAttention)
-and MagiCompiler. The pinned revisions are recorded as build args in the
-Dockerfile.
+and [MagiCompiler](https://github.com/SandAI-org/MagiCompiler). The pinned
+revisions are recorded as build args in the [Dockerfile](Dockerfile).
 
 ## Checkpoints
 
-Weights are not bundled with the code. Put them under `ckpt/` in the repository
-root, which is gitignored:
+Weights are not bundled with the code. Everything the pipeline loads lives in
+one Hugging Face repository,
+[sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview), roughly
+307 GB in total. Download it into `ckpt/` in the repository root, which is
+gitignored:
+
+```bash
+pip install huggingface_hub
+hf download sand-ai/MAGI-2-preview --local-dir ckpt
+```
+
+The directory names in that repository are the ones the configs already expect,
+so nothing needs renaming afterwards:
 
 ```
 ckpt/
-├── magi2_preview/                      # preview stage: safetensors shards + index
-├── magi2_refiner/                      # refiner stage
-├── Wan2.2-TI2V-5B/                     # video VAE
-├── Qwen3.5-27B/                        # text encoder
+├── preview/                            # preview stage: 56 safetensors shards + index
+├── refiner/                            # refiner stage: 3 shards + index
+├── text_encoder/                       # text encoder
+├── vae/                                # video VAE
+│   └── Wan2.2_VAE.pth
+├── stable-audio-open-1.0/              # audio VAE
 └── turbo_vae/                          # fast VAE decoder
     ├── TurboV3-Wan22-TinyShallow_7_7.json
-    └── checkpoint-340000.ckpt
+    └── checkpoint.ckpt
 ```
 
-| Directory | Contents |
-| --- | --- |
-| `magi2_preview` | Preview-stage transformer, released with MAGI-2 |
-| `magi2_refiner` | Refiner-stage transformer, released with MAGI-2 |
-| `Wan2.2-TI2V-5B` | Video VAE, from [Wan-AI/Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B) |
-| `Qwen3.5-27B` | Text encoder |
-| `turbo_vae` | Distilled VAE decoder, used for decoding by default |
+| Directory | Size | Contents |
+| --- | --- | --- |
+| `preview` | 228 GB | Preview-stage transformer, released with MAGI-2 |
+| `text_encoder` | 56 GB | Text encoder, [Qwen/Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B) |
+| `refiner` | 14 GB | Refiner-stage transformer, released with MAGI-2 |
+| `stable-audio-open-1.0` | 5 GB | Audio VAE, decodes the generated audio latents |
+| `vae` | 3 GB | Video VAE, from [Wan-AI/Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B) |
+| `turbo_vae` | 2 GB | Distilled VAE decoder, used for decoding by default |
 
-The configs under `configs/` reference these as `${MAGI2_CKPT_ROOT}/<name>`, and
-that variable defaults to `<repo>/ckpt`. To keep weights somewhere else, point it
-at them rather than editing the configs:
+The configs under [`configs/`](configs) reference these as
+`${MAGI2_CKPT_ROOT}/<name>`, and that variable defaults to `<repo>/ckpt`. To keep
+weights somewhere else, point it at them rather than editing the configs:
 
 ```bash
 export MAGI2_CKPT_ROOT=/data/magi2-weights
@@ -101,24 +118,26 @@ export MAGI2_CKPT_ROOT=/data/magi2-weights
 
 The captions the model was trained on are long and structured, so a prompt
 written by hand underuses it. Two system prompts for a prompt-enhancement LLM
-are included: `prompts/t2v.md` for text to video, and `prompts/i2v.md` for a
-prompt plus a still image.
+are included: [`prompts/t2v.md`](prompts/t2v.md) for text to video, and
+[`prompts/i2v.md`](prompts/i2v.md) for a prompt plus a still image.
 
 Use one as the system prompt of an instruction-following model, pass the raw
 prompt as the message (the still as well, for I2V), and feed the JSON caption it
 returns to the pipeline in place of the prompt. Both lay out the 10 seconds the
 model generates.
 
-`assets/` has both ends of that step. `sample_000.txt` through `sample_002.txt`
-are raw prompts, the kind you would hand to the enhancer;
-`sample_enhanced_t2v.json` is the shape one comes back in. The demo batch runs
-both, so enhancing is not a precondition for generating.
+[`assets/`](assets) has both ends of that step. `sample_000.txt` through
+`sample_002.txt` are raw prompts, the kind you would hand to the enhancer;
+[`sample_enhanced_t2v.json`](assets/sample_enhanced_t2v.json) is the shape one
+comes back in. The demo batch runs both, so enhancing is not a precondition for
+generating.
 
 ## Running inference
 
-`scripts/run_demo.sh` launches `inference/pipeline/entry.py` under `torchrun` on
+[`scripts/run_demo.sh`](scripts/run_demo.sh) launches
+[`inference/pipeline/entry.py`](inference/pipeline/entry.py) under `torchrun` on
 every visible GPU. It generates at 1080p, with seed 42 and the batch in
-`assets/demo_samples.json`:
+[`assets/demo_samples.json`](assets/demo_samples.json):
 
 ```bash
 bash scripts/run_demo.sh
@@ -148,10 +167,11 @@ It also takes `--prompt-file`, `--image`, `--seed`, `--config`, `--output-width`
 and `--deterministic`. Of these only `--seed`, `--samples` and `--output` are
 reachable through `run_demo.sh`.
 
-1080p runs `configs/magi2_refiner.json`: the preview stage generates 512x896 and
-the refiner takes that to 1088x1920. `magi2_refiner.json` extends
-`magi2_preview.json` and carries only what the refiner stage adds, so a shared
-setting is edited in one place.
+1080p runs [`configs/magi2_refiner.json`](configs/magi2_refiner.json): the
+preview stage generates 512x896 and the refiner takes that to 1088x1920.
+`magi2_refiner.json` extends
+[`magi2_preview.json`](configs/magi2_preview.json) and carries only what the
+refiner stage adds, so a shared setting is edited in one place.
 
 1080p is a delivery tier, not the shape that gets generated. The VAE stride
 constrains every generated dimension to a multiple of 16, so the tier generates
