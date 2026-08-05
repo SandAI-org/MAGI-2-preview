@@ -68,10 +68,10 @@ MAGI-2 also needs [MagiAttention](https://github.com/SandAI-org/MagiAttention)
 and [MagiCompiler](https://github.com/SandAI-org/MagiCompiler). The pinned
 revisions are recorded as build args in the [Dockerfile](Dockerfile).
 
-## Model releases
+## Checkpoints
 
-Neither transformer has been step-distilled, so the denoising step count is what
-most of the wall-clock time goes into. That is the difference between the
+Neither transformer has been step-distilled, so the denoising step count is
+where most of the wall-clock time goes. That is the difference between the
 release that exists today and the one that follows:
 
 | Release | Denoising steps | Weights |
@@ -79,16 +79,9 @@ release that exists today and the one that follows:
 | MAGI-2 Preview, base | 100 preview + 5 refiner | [sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview) |
 | MAGI-2 Preview, distilled | far fewer | Coming soon |
 
-The rest of this README describes the base model, the one this repository runs
-today.
-
-## Checkpoints
-
-Weights are not bundled with the code. Everything the pipeline loads lives in
-one Hugging Face repository,
-[sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview), roughly
-307 GB in total. Download it into `ckpt/` in the repository root, which is
-gitignored:
+Everything the base model loads lives in that one repository, roughly 307 GB in
+total. Weights are not bundled with the code; download them into `ckpt/` in the
+repository root, which is gitignored:
 
 ```bash
 pip install huggingface_hub
