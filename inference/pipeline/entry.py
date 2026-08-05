@@ -47,7 +47,8 @@ def parse_args():
                    help="Path to JSON file describing a batch of samples. "
                    "Each entry: {prompt|prompt_file, image?}. Mutually exclusive with --prompt/--image.")
     p.add_argument("--output", type=str, default="output", help="Output directory.")
-    p.add_argument("--seconds", type=float, default=5.0)
+    p.add_argument("--seconds", type=float, default=10.0,
+                   help="Clip duration. 10s is the only duration the model supports.")
     p.add_argument("--seed", type=int, default=42)
     # Advanced overrides
     p.add_argument("--config", type=str, default=None)

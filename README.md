@@ -1,14 +1,26 @@
 # MAGI-2
 
-MAGI-2 generates video from a text prompt (T2V) or from a prompt plus a still
-image (I2V). Generation runs in two stages: `magi2_preview` denoises the clip at
-low resolution, and `magi2_refiner` takes that result up to 1080p. The refiner is
-optional; the preview stage alone produces 270p or 540p video.
+MAGI-2 Preview is a research preview of a unified audio-video generation model.
+A single Transformer processes text, video and audio as one token sequence, and
+an ultra-fine-grained mixture of experts holds around 114B parameters while
+activating around 6B of them per token. The architecture, the training system
+built around it, and the data pipeline are described in [MAGI-2 Preview: Scaling
+Video Generation Models Efficiently](https://sand.ai/blog/magi-2-preview).
+
+This repository is the inference code. It generates video from a text prompt
+(T2V) or from a prompt plus a still image (I2V), with sound generated alongside
+the video and muxed into the output file. Clips are 10 seconds long, which is
+the only duration the model currently supports. Generation runs in two stages:
+`magi2_preview` denoises the clip at low resolution, and `magi2_refiner` takes
+that result up to 1080p. The refiner is optional; the preview stage alone
+produces 272p or 540p video.
 
 ## Requirements
 
 - NVIDIA Hopper GPUs. The 1080p preset expects 8 of them.
 - Python 3.12 and a recent CUDA toolkit.
+- `ffmpeg` on `PATH`, to mux the audio track. Without it the video is still
+  written, just silently.
 
 ## Setup
 
@@ -75,29 +87,65 @@ at them rather than editing the configs:
 export MAGI2_CKPT_ROOT=/data/magi2-weights
 ```
 
+## Prompts
+
+The captions the model was trained on are long and structured, so a prompt
+written by hand underuses it. Two system prompts for a prompt-enhancement LLM
+are included: `prompts/t2v.md` for text to video, and `prompts/i2v.md` for a
+prompt plus a still image.
+
+Use one as the system prompt of an instruction-following model, pass the raw
+prompt as the message (the still as well, for I2V), and feed the JSON caption it
+returns to the pipeline in place of the prompt. Both lay out the 10 seconds the
+model generates.
+
+`assets/` has both ends of that step. `sample_000.txt` through `sample_002.txt`
+are raw prompts, the kind you would hand to the enhancer;
+`sample_enhanced_t2v.json` is the shape one comes back in. The demo batch runs
+both, so enhancing is not a precondition for generating.
+
 ## Running inference
 
 `scripts/run_demo.sh` picks a config and resolution preset, then launches
-`inference/pipeline/entry.py` under `torchrun`. It defaults to I2V at 1080p, 12
-seconds, seed 42, on 8 GPUs:
+`inference/pipeline/entry.py` under `torchrun` on every visible GPU. It defaults
+to 1080p, seed 42, and the batch in `assets/demo_samples.json`:
 
 ```bash
-bash scripts/run_demo.sh                              # I2V, 1080p
-TASK=t2v bash scripts/run_demo.sh                     # text to video
-RESOLUTION=540p bash scripts/run_demo.sh              # preview only, no refiner
-PROMPT="a red fox in snow" bash scripts/run_demo.sh   # one ad-hoc prompt
+bash scripts/run_demo.sh                           # 1080p
+RESOLUTION=540p bash scripts/run_demo.sh           # preview only, no refiner
+SAMPLES=my_samples.json bash scripts/run_demo.sh   # a different batch
+OUTPUT_DIR=output/run7 bash scripts/run_demo.sh
 ```
 
-Without `PROMPT`, prompts come from `assets/demo_samples.json`, three prompts
-paired with the stills in `assets/`. `TASK=t2v` runs the same three
-prompts and ignores the stills.
-Videos and a `run.log` land in `output/<task>_<resolution>_<timestamp>/`.
+The script reads `RESOLUTION`, `SAMPLES`, `OUTPUT_DIR`, `SEED` and `MASTER_PORT`,
+and nothing else. Videos land in `$OUTPUT_DIR/sample_000.mp4` and up, numbered by
+position in the batch.
+
+A samples file is a JSON array with one entry per video. An entry carries its
+prompt inline as `prompt` or as a path in `prompt_file`, and a first frame in
+`image`; leaving `image` out makes it a T2V entry. The shipped batch runs the
+three stills in `assets/` as I2V, the same three prompts again as T2V, and
+`assets/sample_enhanced_t2v.json`.
+
+For a single clip, call the entry point directly:
+
+```bash
+torchrun --nproc_per_node=8 inference/pipeline/entry.py \
+    --resolution 540p --prompt "a red fox in snow" --output output/
+```
+
+It also takes `--prompt-file`, `--image`, `--seed`, `--config`, the
+`--preview-width` / `--preview-height` and `--refiner-width` / `--refiner-height`
+pairs, `--output-width` / `--output-height`, `--num-inference-steps`,
+`--refiner-num-inference-steps` and `--deterministic`. Of these only
+`--resolution`, `--seed`, `--samples` and `--output` are reachable through
+`run_demo.sh`.
 
 The resolution presets are:
 
 | `RESOLUTION` | Config | Preview | Refiner |
 | --- | --- | --- | --- |
-| `270p` | `configs/magi2_preview.json` | 256x448 | off |
+| `272p` | `configs/magi2_preview.json` | 256x448 | off |
 | `540p` | `configs/magi2_preview.json` | 512x896 | off |
 | `1080p` | `configs/magi2_refiner.json` | 512x896 | 1088x1920 |
 
@@ -106,29 +154,24 @@ refiner stage adds, so a shared setting is edited in one place.
 
 A preset name is a delivery tier, not the shape that gets generated. The VAE
 stride constrains every generated dimension to a multiple of 16, so the shape
-lands near the tier rather than on it: the `270p` tier generates 448 tall and
-`1080p` generates 1088 wide. Videos are written at that generated shape. Set
-`OUTPUT_WIDTH` and `OUTPUT_HEIGHT` to have the finished video rescaled to an exact
-size, the way the reference delivers its tiers: 270x480, 540x960 or 1080x1920.
+lands near the tier rather than on it: the `272p` tier generates 448 tall and
+`1080p` generates 1088 wide. Videos are written at that generated shape. Pass
+`--output-width` and `--output-height` to have the finished video rescaled to an
+exact size, the way the reference delivers its tiers: 270x480, 540x960 or
+1080x1920.
 
-Everything else is overridable through the environment: `SECONDS_PER_VIDEO`,
-`SEED`, `GPUS_PER_NODE`, `NUM_INFERENCE_STEPS`, `OUTPUT_DIR`, and the explicit
-`PREVIEW_WIDTH` / `REFINER_WIDTH` pairs. Compilation caches are keyed on shapes
-and on deterministic mode; after changing either, rerun with `CLEAN_CACHE=true`
-so a stale kernel is not reused.
+Four environment variables decide where each large component sits between
+phases: `MAGI2_TEXT_ENC_OFFLOAD_MODE`, `MAGI2_PREVIEW_OFFLOAD_MODE`,
+`MAGI2_REFINER_OFFLOAD_MODE` and `MAGI2_VAE_OFFLOAD_MODE`, each one of `cpu`,
+`gpu` or `roundtrip`. The preview and the refiner default to `roundtrip`, staged
+in and out around the stage that needs them, because at 1080p neither fits on an
+80GB card next to the other's activations.
 
-Three more decide where each large component sits: `MAGI2_TEXT_ENC_OFFLOAD_MODE`,
-`MAGI2_PREVIEW_OFFLOAD_MODE` and `MAGI2_REFINER_OFFLOAD_MODE`, each one of `cpu`,
-`gpu` or `roundtrip`. The defaults stage the preview and the refiner in and out
-around the stage that needs them, because at 1080p neither fits on an 80GB card
-next to the other's activations.
-
-`MAGI2_VAE_DECODE_MODE` picks the decoder. Unset, or `none`, uses the distilled
-turbo decoder from `ckpt/turbo_vae`: a temporal sliding window that runs on a
-single rank. `tiled` and `chunk` use the full Wan VAE instead and spread the work
-over the ranks sharing the video, `tiled` by splitting the frame into overlapping
-spatial tiles and `chunk` by splitting each convolution along the width. They cost
-more time and memory than the distilled decoder.
+Decoding uses the distilled turbo decoder from `ckpt/turbo_vae`, a temporal
+sliding window that runs on one rank per video. `MAGI2_DETERMINISTIC=1`, or
+`--deterministic`, makes the MoE scatter and the attention kernels bit-exact at
+some cost in speed. `MAGI2_SAVE_LATENT_PATH` writes the post-refiner latent of
+each sample to that directory.
 
 ## License
 

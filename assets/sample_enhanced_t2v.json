@@ -1,0 +1,218 @@
+{
+  "global_layer": {
+    "context": "A single continuous take inside a small corner cafe on a rainy afternoon.",
+    "description": "A barista lowers a cup onto a saucer and speaks one line to the customer while the camera pushes in.",
+    "aesthetics": {
+      "style": "naturalistic documentary cinematography",
+      "contrast": "low to moderate with open shadow detail",
+      "saturation": "restrained true-to-life saturation",
+      "color_scheme": "warm amber interior against cool grey window light",
+      "mood_atmosphere": "calm and unhurried"
+    },
+    "audio_baseline": {
+      "ambience": "steady rain against glass, low espresso machine hum, occasional cup clatter",
+      "dialogue": {
+        "language": "English",
+        "speaker_tags": ["<subject 1>"]
+      }
+    },
+    "objects_static": [
+      {
+        "object_id": "<object 1>",
+        "description": "a white ceramic cup resting on a matching saucer",
+        "shape_and_color": "rounded white cup holding a pale crema surface",
+        "texture": "smooth glazed ceramic",
+        "relative_size": "small, about one third the width of the barista's hand",
+        "position": "on the wooden counter in the lower right third of frame",
+        "orientation": "handle turned toward the customer"
+      }
+    ],
+    "video_metadata": {
+      "duration": 10.0,
+      "aspect_ratio": "16:9"
+    },
+    "lighting_baseline": {
+      "conditions": "soft overcast daylight through a large window with warm pendant fill",
+      "direction": "key from the window at camera left, warm fill from overhead pendants",
+      "shadows": "soft edged with retained detail",
+      "source_consistency": "window and pendant sources hold the same intensity and color for the full clip"
+    },
+    "environment_baseline": {
+      "background_setting": "a small cafe interior with a wooden counter, shelves of stacked cups, and a rain streaked window behind"
+    },
+    "alive_subjects_static": [
+      {
+        "subject_id": "<subject 1>",
+        "description": "a barista working behind the counter",
+        "position": "behind the counter at frame center",
+        "orientation": "facing camera, angled slightly to frame right",
+        "visual_attributes": {
+          "gender": "female",
+          "ethnicity": "East Asian",
+          "age_group": "late twenties",
+          "facial_features": "round face, dark eyes, hair tied back in a low bun",
+          "clothing": "dark green apron over a white shirt with rolled sleeves",
+          "appearance_details": "a thin silver ring on the right hand"
+        }
+      }
+    ],
+    "camera_cinematography": {
+      "overall_camera_style": "single continuous slow push-in on a stabilized head",
+      "default_depth_of_field": "shallow, the barista sharp and the shelves softly separated",
+      "lens_focal_length": "50mm"
+    }
+  },
+  "dynamic_layer": {
+    "timeline_segments": [
+      {
+        "segment_basic_info": {
+          "timestamp_range": "00:00.0-00:05.0",
+          "segment_description": "The barista lowers the cup onto the saucer with both hands and releases it, and the camera begins a slow push-in.",
+          "active_background": "rain runs down the window behind her in continuous vertical streaks",
+          "camera_delta": {
+            "focus": "held on the barista's hands and face",
+            "camera_position": "chest height, one meter back from the counter edge",
+            "composition": "medium shot, barista at center, cup in the lower right third",
+            "camera_movement": {
+              "type": "push-in",
+              "direction": "forward along the lens axis",
+              "intensity": "slow and even"
+            }
+          }
+        },
+        "objects": [
+          {
+            "object_id": "<object 1>",
+            "timestamp": "00:00.0-00:05.0",
+            "number_of_objects": 1,
+            "dynamic_state": {
+              "state_change": "the cup travels from her hands down onto the saucer and comes to rest level and full",
+              "motion_detail": "a short controlled descent that settles without a wobble, the crema surface swaying once and flattening"
+            },
+            "spatial_position": {
+              "location": "on the counter in the lower right third",
+              "relative_size": "small",
+              "orientation": "handle turned toward the customer"
+            }
+          }
+        ],
+        "alive_subjects": [
+          {
+            "subject_id": "<subject 1>",
+            "timestamp": "00:00.0-00:05.0",
+            "number_of_subjects": 1,
+            "spatial_position": {
+              "location": "behind the counter at frame center",
+              "relative_size": "upper body fills the central third",
+              "orientation": "facing camera, shoulders square to the counter"
+            },
+            "action": {
+              "primary_action": "setting the cup down and releasing it",
+              "body_configuration": "both elbows tucked close, forearms lowering together, spine upright",
+              "motion_detail": "fingers open away from the cup one at a time, hands withdraw to the counter edge and rest there",
+              "interaction": "both hands hold the saucer rim, then leave it fully supported on the counter",
+              "facial_expression": "eyes down on the cup, mouth relaxed"
+            }
+          }
+        ],
+        "text_render": [],
+        "causal_events": [
+          {
+            "event_id": "event 1",
+            "timestamp_range": "00:02.4-00:04.0",
+            "trigger": "the barista releases the saucer",
+            "effect_outcome": "the cup stays level on the counter and a thin ribbon of steam rises straight from the surface",
+            "physics": "the saucer takes the full weight of the cup and the liquid surface returns to level"
+          }
+        ],
+        "audio": {
+          "dialogue_lines": [],
+          "ambience_deltas": [
+            {
+              "timestamp_range": "00:00.0-00:05.0",
+              "ambience": "rain and machine hum hold steady under a soft ceramic contact at the moment of placement"
+            }
+          ],
+          "special_audio_events": [
+            {
+              "timestamp": "00:02.4",
+              "sound_description": "a short soft ceramic tap as the cup meets the saucer",
+              "visual_sync": "matches the frame where the cup base settles"
+            }
+          ]
+        }
+      },
+      {
+        "segment_basic_info": {
+          "timestamp_range": "00:05.0-00:10.0",
+          "segment_description": "The barista lifts her gaze to the customer, speaks one line, and holds a small closing smile as the push-in settles.",
+          "active_background": "rain continues down the window at the same rate",
+          "camera_delta": {
+            "focus": "shifts from the cup to the barista's eyes and holds",
+            "camera_position": "chest height, now half a meter from the counter edge",
+            "composition": "medium close-up, barista at center, cup still visible in the lower right corner",
+            "camera_movement": {
+              "type": "push-in",
+              "direction": "forward along the lens axis, decelerating to a stop",
+              "intensity": "slowing to rest by the final second"
+            }
+          }
+        },
+        "objects": [
+          {
+            "object_id": "<object 1>",
+            "timestamp": "00:05.0-00:10.0",
+            "number_of_objects": 1,
+            "dynamic_state": {
+              "state_change": "the cup remains at rest on the saucer, still full",
+              "motion_detail": "only the steam moves, drifting upward and thinning"
+            },
+            "spatial_position": {
+              "location": "on the counter in the lower right corner",
+              "relative_size": "small",
+              "orientation": "handle turned toward the customer"
+            }
+          }
+        ],
+        "alive_subjects": [
+          {
+            "subject_id": "<subject 1>",
+            "timestamp": "00:05.0-00:10.0",
+            "number_of_subjects": 1,
+            "spatial_position": {
+              "location": "behind the counter at frame center",
+              "relative_size": "head and shoulders fill the central half",
+              "orientation": "facing camera directly"
+            },
+            "action": {
+              "primary_action": "looking up and speaking one line, then holding still",
+              "body_configuration": "chin lifts, shoulders stay level, hands rest on the counter edge",
+              "motion_detail": "gaze rises to camera, lips articulate the line, then the mouth closes into a small smile that holds",
+              "interaction": "addresses the customer standing at the counter off camera",
+              "facial_expression": "attentive, warming into a brief smile"
+            }
+          }
+        ],
+        "text_render": [],
+        "causal_events": [],
+        "audio": {
+          "dialogue_lines": [
+            {
+              "timestamp": "00:05.6-00:07.4",
+              "speaker": "<subject 1>",
+              "text": "Careful, it's still very hot.",
+              "delivery": "warm and low, unhurried, close to the microphone"
+            }
+          ],
+          "ambience_deltas": [
+            {
+              "timestamp_range": "00:07.4-00:10.0",
+              "ambience": "the machine hum drops away and the rain remains alone under the final hold"
+            }
+          ],
+          "special_audio_events": []
+        }
+      }
+    ]
+  }
+}
