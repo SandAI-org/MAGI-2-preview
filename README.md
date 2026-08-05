@@ -70,11 +70,18 @@ revisions are recorded as build args in the [Dockerfile](Dockerfile).
 
 ## Checkpoints
 
-Weights are not bundled with the code. Everything the pipeline loads lives in
-one Hugging Face repository,
-[sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview), roughly
-307 GB in total. Download it into `ckpt/` in the repository root, which is
-gitignored:
+Neither transformer has been step-distilled, so the denoising step count is
+where most of the wall-clock time goes. That is the difference between the
+release that exists today and the one that follows:
+
+| Release | Denoising steps | Weights |
+| --- | --- | --- |
+| MAGI-2 Preview, base | 100 preview + 5 refiner | [sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview) |
+| MAGI-2 Preview, distilled | far fewer | Coming soon |
+
+Everything the base model loads lives in that one repository, roughly 307 GB in
+total. Weights are not bundled with the code; download them into `ckpt/` in the
+repository root, which is gitignored:
 
 ```bash
 pip install huggingface_hub
@@ -97,14 +104,17 @@ ckpt/
     └── checkpoint.ckpt
 ```
 
+Each directory name below links to the folder it comes from in the Hugging Face
+repository:
+
 | Directory | Size | Contents |
 | --- | --- | --- |
-| `preview` | 228 GB | Preview-stage transformer, released with MAGI-2 |
-| `text_encoder` | 56 GB | Text encoder, [Qwen/Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B) |
-| `refiner` | 14 GB | Refiner-stage transformer, released with MAGI-2 |
-| `stable-audio-open-1.0` | 5 GB | Audio VAE, decodes the generated audio latents |
-| `vae` | 3 GB | Video VAE, from [Wan-AI/Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B) |
-| `turbo_vae` | 2 GB | Distilled VAE decoder, used for decoding by default |
+| [`preview`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/preview) | 228 GB | Preview-stage transformer, released with MAGI-2 |
+| [`text_encoder`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/text_encoder) | 56 GB | Text encoder, [Qwen/Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B) |
+| [`refiner`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/refiner) | 14 GB | Refiner-stage transformer, released with MAGI-2 |
+| [`stable-audio-open-1.0`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/stable-audio-open-1.0) | 5 GB | Audio VAE, decodes the generated audio latents |
+| [`vae`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/vae) | 3 GB | Video VAE, from [Wan-AI/Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B) |
+| [`turbo_vae`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/turbo_vae) | 2 GB | Distilled VAE decoder, used for decoding by default |
 
 The configs under [`configs/`](configs) reference these as
 `${MAGI2_CKPT_ROOT}/<name>`, and that variable defaults to `<repo>/ckpt`. To keep
