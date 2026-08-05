@@ -1,4 +1,132 @@
-A group of young dancers perform synchronized choreography indoors, wearing matching gray outfits and white sneakers, moving energetically with arm swings and leg kicks while smiling at the camera.
-Content and Timestamps of Active Speakers:Oh, oh, oh.[]
-Video Transition Timestamps:[3.4,4.6]
-Content and Positions of OCR-Recognized Subtitles:[QLO<4.5-5.0>[0,64,1,67],JNI<1.0-1.5>[0,62,0,65] <4.5-5.0>[0,62,0,65],DiNO<3.5-4.0>[14,2,57,11] <4.5-5.5>[64,29,84,32],Khúc này sao thé?<3.5-4.0>[3,79,61,83],DAOKHU<4.5-5.5>[92,28,100,32]]
+# global_caption
+
+core_caption:A 10-second continuous animated sequence following a young girl from a dark, mist-filled forest to a sudden, bright clearing overlooking a vast ocean, shifting the emotional tone from mysterious tension to liberated relief.
+format_and_structure:10-second Japanese anime-style narrative short. Features a linear chronological progression with a smooth environmental transition and one deliberate camera cut near the climax to emphasize emotional release.
+narrative_and_emotional_design:The emotional arc is entirely visual and atmospheric, progressing from solitary, quiet movement in a confined, oppressive space to overwhelming awe, ending in peaceful relief in an expansive, bright environment.
+visual_design:2D Japanese anime film aesthetic (8K high-definition finish). Begins with deep, desaturated greens, low-key lighting, wet textures, and volumetric mist. Progresses smoothly to bright, high-contrast cyan, brilliant sunlight, and a soft, hazy atmospheric perspective.
+audio_design:Completely ambient and naturalistic. Driven by diegetic sounds: crunching footsteps on wet stones, rustling leaves, transitioning to swelling ocean waves, strong sea wind, and a subtle human breath. No dialogue or background music.
+
+continuity_requirements:Strictly maintain the 2D Japanese anime aesthetic; do not shift to 3D CGI or photorealistic live-action styles. | Lock the character's identity and outfit: dark hair, light-colored coat, dark skirt, brown boots, and simple canvas backpack. | Ensure precise volume retention and anatomical consistency of the character's limbs during walking motions; prevent structural morphing. | Maintain spatial continuity of the background; do not let trees or ocean waves pop or warp into existence.
+
+# reference_bank
+
+## reference_bank1
+
+reference_identifier:ref_girl
+reference_type:character
+label:Young Japanese Girl
+role:Primary protagonist traversing the environment
+description:A young female character in a 2D anime style, seen initially from behind, carrying a backpack.
+appearance_or_design:Shoulder-length dark brown/black hair, wearing a loose light-colored coat, a dark mid-length skirt, brown boots, and a simple light-colored canvas backpack.
+
+## reference_bank2
+
+reference_identifier:ref_forest
+reference_type:setting
+label:Deep Forest Path
+role:Starting environment providing a confined, mysterious atmosphere
+description:A dense, dark woodland with a rocky, uneven path.
+appearance_or_design:Towering pine and cedar trees, deep green hues, moss-covered rocks, wet stones reflecting faint light, scattered fallen leaves, and volumetric ground mist.
+
+## reference_bank3
+
+reference_identifier:ref_ocean
+reference_type:setting
+label:Vast Ocean
+role:Climactic environment providing visual and emotional release
+description:An expansive, bright coastal view suddenly revealed at the edge of the forest.
+appearance_or_design:Bright blue water stretching to a distant horizon, sparkling surface reflections from intense sunlight, white crashing waves, and a clear blue sky.
+
+# shot_timeline
+
+## shot_timeline1
+
+shot_identifier:shot_01_forest_to_ocean_reveal
+
+time_range_seconds:0.0 | 8.0
+scene_reference_identifier:ref_forest
+shot_caption:Starting from the exact framing of the input image, the camera steadily follows the girl from behind as she walks down the damp, rocky path. As she progresses, the canopy thins and the dark green environment gradually brightens, revealing patches of blue sky. The wind picks up, blowing her hair and coat backwards. She slows her pace and raises her arm to push aside a dense layer of foreground branches. As the foliage parts, the camera pushes smoothly past her shoulder to reveal a vast, sparkling blue ocean. The sudden influx of intense sunlight heavily backlights her silhouette, and her body language freezes in awe.
+camera_lighting_and_composition:Smooth, stabilized follow-camera from a mid-level behind the subject, seamlessly pushing forward. Lighting begins as low-key volumetric lighting (dark greens, cyan shadows) and dynamically transitions into high-key, blooming sunlight from the front-center as the ocean is revealed, creating strong spatial depth.
+motion_and_physical_logic:Articulated bipedal walking gait with realistic weight transfer on the wet, uneven stones; her coat and skirt hem sway naturally with her momentum. From 3.0s, frontal wind introduces secondary motion to her hair and clothing. At 5.0s, strict arm kinematics are used to push aside rigid foreground foliage, preventing hand distortion. The ocean surface exhibits high-fidelity fluid dynamics with rolling waves.
+
+reference_identifiers:ref_girl | ref_forest | ref_ocean
+
+audio_event_identifiers:audio_footsteps | audio_wind_buildup | audio_branch_sweep | audio_ocean_waves
+
+## shot_timeline2
+
+shot_identifier:shot_02_profile_relief
+
+time_range_seconds:8.0 | 10.0
+scene_reference_identifier:ref_ocean
+shot_caption:Cut to a 2/3 front-profile medium close-up of the girl. Bright sunlight illuminates her face. She closes her eyes, takes a deep breath, and her shoulders visibly drop as a subtle, soft smile forms on her lips. Her hair and collar flutter wildly yet beautifully in the strong sea breeze. The camera slowly pans sideways to the expansive ocean, leaving her face and filling the frame with the bright sky and gentle waves.
+camera_lighting_and_composition:Medium close-up shifting to a slow lateral pan. Soft, diffused sunlight wraps around the subject's face, casting natural anime-style cel shading on her neck. High contrast between the foreground subject and the bright, airy ocean background.
+motion_and_physical_logic:Facial micro-kinematics: eyelids closing smoothly, chest expanding steadily with an inhale, and shoulders dropping under gravity to signify relaxation. High-frequency fluid dynamics applied to hair strands and fabric reacting continuously to a sustained directional wind.
+
+reference_identifiers:ref_girl | ref_ocean
+
+audio_event_identifiers:audio_ocean_waves | audio_deep_breath | audio_seagulls
+
+# audio_event_timeline
+
+## audio_event_timeline1
+
+audio_event_identifier:audio_footsteps
+event_type:foley
+
+time_range_seconds:0.0 | 5.0
+source_reference_identifier:ref_girl
+audio_caption:Rhythmic, slightly hurried crunching footsteps on wet stones and damp leaves, accompanied by subtle fabric rustling.
+synchronization_note:Sync perfectly with the girl's walking cadence; fade out as her pace slows.
+
+## audio_event_timeline2
+
+audio_event_identifier:audio_wind_buildup
+event_type:ambient
+
+time_range_seconds:3.0 | 8.0
+source_reference_identifier:ref_forest
+audio_caption:A rising, whistling wind rustling through dense pine needles, growing progressively louder.
+synchronization_note:Volume increases linearly alongside the visual brightening of the scene.
+
+## audio_event_timeline3
+
+audio_event_identifier:audio_branch_sweep
+event_type:foley
+
+time_range_seconds:5.0 | 6.5
+source_reference_identifier:ref_girl
+audio_caption:The distinct, sharp brushing and snapping sound of stiff leaves and branches being pushed aside.
+synchronization_note:Sync precisely with the girl's hand contacting and moving the foreground foliage.
+
+## audio_event_timeline4
+
+audio_event_identifier:audio_ocean_waves
+event_type:ambient
+
+time_range_seconds:4.0 | 10.0
+source_reference_identifier:ref_ocean
+audio_caption:Distant muffled waves that suddenly swell into a loud, expansive, and rhythmic crashing of sea surf.
+synchronization_note:Low-pass filter off and dramatic volume spike exactly at 6.0s when the ocean visually dominates the frame.
+
+## audio_event_timeline5
+
+audio_event_identifier:audio_deep_breath
+event_type:foley
+
+time_range_seconds:8.0 | 9.5
+source_reference_identifier:ref_girl
+audio_caption:A soft, deliberate human inhale and quiet, relieved exhale.
+synchronization_note:Sync with the expansion of the character's chest and dropping shoulders in the close-up.
+
+## audio_event_timeline6
+
+audio_event_identifier:audio_seagulls
+event_type:ambient
+
+time_range_seconds:8.5 | 10.0
+source_reference_identifier:ref_ocean
+audio_caption:The faint, echoing cries of seagulls soaring over the water.
+synchronization_note:Introduce seamlessly during the camera pan away from the girl.
+
+generation_requirements:Lock the starting frame perfectly to the provided input image, preserving the exact lighting, framing, and character posture. | Do not use cheap transitions such as flash-to-white, sudden crossfades, or teleportation; the transition from forest to ocean must be achieved spatially through character movement and camera push-in. | Ensure zero generation of modern elements: no cars, buildings, smartphones, or text. | Strictly enforce 2D anime physics; avoid realistic fleshy textures or 3D video game rendering styles. | Maintain strict structural rigidity of the character's face and limbs during the cut at 8.0s; do not allow facial features to warp or slide.

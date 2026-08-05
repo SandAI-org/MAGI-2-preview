@@ -28,9 +28,9 @@ from inference.infra.distributed import initialize_expert_parallel, initialize_m
 from inference.utils import print_rank_0
 
 RESOLUTION_PRESETS = {
-    "272p": {"config": "configs/magi2_preview.json", "pw": 256, "ph": 448},
-    "540p": {"config": "configs/magi2_preview.json", "pw": 512, "ph": 896},
-    "1080p": {"config": "configs/magi2_refiner.json", "pw": 512, "ph": 896, "rw": 1088, "rh": 1920},
+    "272p": {"config": "configs/magi2_preview.json", "pw": 448, "ph": 256},
+    "540p": {"config": "configs/magi2_preview.json", "pw": 896, "ph": 512},
+    "1080p": {"config": "configs/magi2_refiner.json", "pw": 896, "ph": 512, "rw": 1920, "rh": 1088},
 }
 
 

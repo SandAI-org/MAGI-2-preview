@@ -89,7 +89,7 @@
   },
   "evaluation_config": {
     "fps": 12.5,
-    "shift": 9.0,
+    "shift": 7.0,
     "vae_model_path": "${MAGI2_CKPT_ROOT}/vae",
     "txt_model_path": "${MAGI2_CKPT_ROOT}/text_encoder",
     "vae_stride": [
@@ -112,9 +112,12 @@
     "use_dynamic_cfg": false,
     "dynamic_cfg_start_t": 500,
     "dynamic_cfg_cutoff_value": 2.0,
-    "use_skimmed_cfg_linear": true,
+    "use_negative_prompt": true,
+    "use_ref_for_uncond": true,
+    "use_skimmed_cfg_linear": false,
     "skimmed_cfg_scale": 3.0,
     "cfg_rescale": 0.0,
+    "ref_image_type": "original",
     "use_turbo_vae": true,
     "student_config": "${MAGI2_CKPT_ROOT}/turbo_vae/TurboV3-Wan22-TinyShallow_7_7.json",
     "student_ckpt": "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint.ckpt",

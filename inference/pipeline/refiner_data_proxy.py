@@ -435,7 +435,7 @@ class SingleData:
         )
         return coords_mapping
 
-    def unpack_token_sequence(self, token_sequence):
+    def depack_token_sequence(self, token_sequence):
         video_x_t = token_sequence[: self.video_token_num, : self.video_channel]
         video_x_t = rearrange(
             video_x_t,
@@ -489,7 +489,7 @@ class SimplePackedData:
     def max_seqlen(self):
         return max([item.total_token_num for item in self.items])
 
-    def unpack_token_sequence(self, token_sequence):
+    def depack_token_sequence(self, token_sequence):
         video_x_t_list = []
         audio_x_t_list = []
 
@@ -497,7 +497,7 @@ class SimplePackedData:
             token_sequence, [item.total_token_num for item in self.items], dim=0
         )
         for item, token_sequence in zip(self.items, token_sequence_list):
-            video_x_t, audio_x_t = item.unpack_token_sequence(token_sequence)
+            video_x_t, audio_x_t = item.depack_token_sequence(token_sequence)
             video_x_t_list.append(video_x_t)
             audio_x_t_list.append(audio_x_t)
         return torch.stack(video_x_t_list, dim=0), torch.stack(audio_x_t_list, dim=0)
@@ -921,4 +921,4 @@ class Magi2RefinerDataProxy:
             x = x[token_restore_order]
 
         simple_packed_data: SimplePackedData = self.get_saved_data("simple_packed_data")
-        return simple_packed_data.unpack_token_sequence(x)
+        return simple_packed_data.depack_token_sequence(x)

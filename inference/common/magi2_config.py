@@ -263,6 +263,8 @@ class EvaluationConfig(BaseModel):
     use_dynamic_cfg: bool = False
     dynamic_cfg_start_t: int = 500
     dynamic_cfg_cutoff_value: float = 2.0
+    use_negative_prompt: bool = False
+    use_ref_for_uncond: bool = False
     use_skimmed_cfg_linear: bool = Field(
         default_factory=lambda: env_is_true("USE_SKIMMED_CFG_LINEAR")
     )
@@ -270,6 +272,7 @@ class EvaluationConfig(BaseModel):
         default_factory=lambda: _env_float("SKIMMED_CFG_SCALE", 5.0)
     )
     cfg_rescale: float = Field(default_factory=_cfg_rescale_default)
+    ref_image_type: Literal["square", "original"] = "original"
 
     @field_validator("skimmed_cfg_scale", "cfg_rescale")
     @classmethod
@@ -313,11 +316,6 @@ class EvaluationConfig(BaseModel):
     magi2_refiner_patch_size: Tuple[int, int, int] = (1, 1, 1)
     magi2_refiner_shift: Optional[float] = None
     magi2_refiner_audio_noise_scale: float = -1.0
-    # The refiner produces heavy block artifacts on short clips: 49 latent
-    # frames (8s) is badly corrupted while 63 (10s) is clean. Shorter clips are
-    # extended to this length by freezing the last frame and cropped back once
-    # denoising is done. 0 disables the workaround.
-    magi2_refiner_min_latent_frames: int = 0
     magi2_refiner_data_proxy_config: Magi2RefinerDataProxyConfig = Field(
         default_factory=lambda: Magi2RefinerDataProxyConfig(
             frame_receptive_field=11,

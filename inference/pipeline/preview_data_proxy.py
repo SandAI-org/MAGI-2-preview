@@ -29,6 +29,11 @@ class ModelInput:
     ref_video_feat_len: torch.Tensor | list[int] = None
     per_token_video_t: Optional[torch.Tensor] = None
     per_token_audio_t: Optional[torch.Tensor] = None
+    # Conditioning images are packed as (B, M, C, 1, H, W) with one (H, W) pair
+    # per image in ref_image_feat_len, plus one special token embedding each.
+    ref_image_feat: Optional[torch.Tensor] = None
+    ref_image_feat_len: Optional[torch.Tensor] = None
+    ref_image_special_token_embedding: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -41,6 +46,7 @@ class CFGConfig:
     dynamic_cfg_cutoff_value: float = 0.0
     video_txt_guidance_scale: float = 0.0
     audio_txt_guidance_scale: float = 0.0
+    use_ref_for_uncond: bool = False
     use_skimmed_cfg_linear: bool = False
     skimmed_cfg_scale: float = 5.0
     cfg_rescale: float = 0.0
@@ -55,11 +61,13 @@ class SamplerInput:
     txt_feat: torch.Tensor  # B, L, D
     null_txt_feat: torch.Tensor  # B, L, C
     ref_audio_feat: torch.Tensor  # B, L, C
-    ref_video_feat: torch.Tensor  # B, C, 1, H, W
-    first_frame_feat: torch.Tensor  # B, C, 1, H, W
+    ref_video_feat: Optional[torch.Tensor]  # B, C, 1, H, W
     video_scheduler: SchedulerMixin
     audio_scheduler: SchedulerMixin
     cfg_config: CFGConfig
+    ref_image_feat: Optional[torch.Tensor] = None  # B, M, C, 1, H, W
+    ref_image_feat_len: Optional[torch.Tensor] = None  # B, M, 2 holding (H, W)
+    ref_image_special_token_embedding: Optional[torch.Tensor] = None  # B, M, D
 
 
 import math
@@ -130,6 +138,11 @@ def _ceil_div(a: int, b: int) -> int:
     return (a + b - 1) // b
 
 
+def _len_to_list(value: torch.Tensor) -> list[int]:
+    """Flatten a packed ref-length entry (e.g. [H, W]) back into a python list."""
+    return [int(v) for v in value.detach().to(torch.long).reshape(-1).tolist()]
+
+
 @dataclass
 class SingleData:
     video_x_t: torch.Tensor
@@ -150,6 +163,9 @@ class SingleData:
     vae_first_latent_is_image: bool = True
     video_fps: float = 25.0
     time_pos_fps: float = 3.125
+    ref_image_feats: Optional[list[torch.Tensor]] = None
+    ref_image_feat_lens: Optional[list[list[int]]] = None
+    ref_image_special_tokens: Optional[list[torch.Tensor]] = None
 
     def __post_init__(self) -> None:
         self.video_token_num = self.video_x_t.shape[0]
@@ -158,6 +174,20 @@ class SingleData:
         self.txt_feat = self.txt_feat[: self.txt_feat_len]
         if self.per_token_audio_t is not None:
             self.per_token_audio_t = self.per_token_audio_t[: self.audio_feat_len]
+
+        self.ref_image_feats = self.ref_image_feats or []
+        self.ref_image_feat_lens = self.ref_image_feat_lens or []
+        self.ref_image_special_tokens = self.ref_image_special_tokens or []
+        # feat_lens holds the patch-grid (H, W) per image, so their product is the
+        # token count that survived img2tokens for that image.
+        self.ref_image_token_nums: list[int] = [
+            int(math.prod(feat_len)) for feat_len in self.ref_image_feat_lens
+        ]
+        self.ref_image_feats = [
+            feat[:num] for feat, num in zip(self.ref_image_feats, self.ref_image_token_nums)
+        ]
+        self.num_ref_images = len(self.ref_image_feats)
+        self.total_ref_image_feat_len = sum(self.ref_image_token_nums)
 
         self.video_channel = self.video_x_t.shape[-1]
         self.audio_channel = self.audio_x_t.shape[-1]
@@ -177,11 +207,16 @@ class SingleData:
     @property
     def total_token_num(self) -> int:
         total = self.video_token_num + self.audio_feat_len + self.txt_feat_len
+        # Each conditioning image also contributes one leading special token.
+        total += self.total_ref_image_feat_len + self.num_ref_images
         return total + (1 if self.add_time_token else 0)
 
     @property
     def feat_to_cat(self) -> list[torch.Tensor]:
         tensors = [self.video_x_t, self.audio_x_t, self.txt_feat]
+        for k in range(self.num_ref_images):
+            tensors.append(self.ref_image_special_tokens[k])
+            tensors.append(self.ref_image_feats[k])
         if self.add_time_token:
             tensors.append(
                 self.diffusion_t.to(
@@ -198,6 +233,13 @@ class SingleData:
     def modality_map_seqlens(self) -> tuple[list[int], list[int]]:
         seqlens = [self.video_token_num, self.audio_feat_len, self.txt_feat_len]
         maps = [Modality.VIDEO, Modality.AUDIO, Modality.TEXT]
+        for k in range(self.num_ref_images):
+            # The special token comes from the text encoder, so it routes as text
+            # while the image patches themselves route as video.
+            seqlens.append(1)
+            maps.append(Modality.TEXT)
+            seqlens.append(self.ref_image_token_nums[k])
+            maps.append(Modality.VIDEO)
         if self.add_time_token:
             seqlens.append(1)
             maps.append(Modality.TIME)
@@ -260,6 +302,29 @@ class SingleData:
             ),
         ]
 
+        for k in range(self.num_ref_images):
+            token_len = self.ref_image_token_nums[k]
+            if len(self.ref_image_feat_lens[k]) >= 2:
+                h_i = int(self.ref_image_feat_lens[k][0])
+                w_i = int(self.ref_image_feat_lens[k][1])
+            else:
+                h_i = w_i = int(math.ceil(math.sqrt(token_len)))
+            # Images sit past the generated clip on the time axis, one latent step
+            # apart, with a gap of 1 so they never alias the last video frame.
+            t_off = t_steps + 2 + k
+            coords.append(
+                torch.tensor(
+                    [[t_off, -1, -1, 1, h_i, w_i, 1, h_i, w_i]],
+                    device=self.device,
+                    dtype=self.default_dtype,
+                )
+            )
+            coords.append(
+                self._default_coords(
+                    (1, h_i, w_i), (1, h_i, w_i), offset_thw=(t_off, 0, 0)
+                )[:token_len]
+            )
+
         if self.add_time_token:
             coords.append(self._default_coords((1, 1, 1), (1, 1, 1))[:1])
         return coords
@@ -278,6 +343,10 @@ class SingleData:
             self.per_token_audio_t.squeeze(-1),
             torch.zeros(self.txt_feat_len, device=self.device),
         ]
+        for k in range(self.num_ref_images):
+            # Images are clean conditioning, so their diffusion time is 0.
+            parts.append(torch.zeros(1, device=self.device))
+            parts.append(torch.zeros(self.ref_image_token_nums[k], device=self.device))
         if self.add_time_token:
             parts.append(self.diffusion_t.reshape(1).to(self.device))
         raw_t = torch.cat(parts, dim=0)
@@ -351,7 +420,7 @@ class SimplePackedData:
     def __getitem__(self, index: int) -> SingleData:
         return self.items[index]
 
-    def unpack_token_sequence(
+    def depack_token_sequence(
         self, token_sequence: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         videos, audios = [], []
@@ -543,8 +612,37 @@ class Magi2DataProxy:
             ptv_tokens = self.img2tokens(data.per_token_video_t)[:, :, :1]
             pta = data.per_token_audio_t
 
+        ref_image_data = data.ref_image_feat
+        ref_image_feat_len = data.ref_image_feat_len
+        ref_image_special_token_embedding = data.ref_image_special_token_embedding
+        has_ref_image = (
+            ref_image_data is not None
+            and ref_image_data.ndim >= 5
+            and ref_image_feat_len is not None
+            and ref_image_feat_len.ndim >= 2
+            and ref_image_special_token_embedding is not None
+            and ref_image_special_token_embedding.ndim >= 3
+        )
+        num_ref_image = ref_image_data.shape[1] if has_ref_image else 0
+        ref_device, ref_dtype = text_tokens.device, text_tokens.dtype
+
         items = []
         for i in range(batch_size):
+            ref_image_feats_i: list[torch.Tensor] = []
+            ref_image_feat_lens_i: list[list[int]] = []
+            ref_image_special_tokens_i: list[torch.Tensor] = []
+            for k in range(num_ref_image):
+                # img2tokens works on a batch, so the single image is given a
+                # batch axis and then squeezed back out.
+                feat = self.img2tokens(ref_image_data[i, k].unsqueeze(0)).squeeze(0)
+                ref_image_feats_i.append(feat)
+                ref_image_feat_lens_i.append(_len_to_list(ref_image_feat_len[i, k]))
+                ref_image_special_tokens_i.append(
+                    ref_image_special_token_embedding[i, k]
+                    .to(device=ref_device, dtype=ref_dtype)
+                    .unsqueeze(0)
+                )
+
             items.append(
                 SingleData(
                     video_x_t=video_tokens[i],
@@ -552,6 +650,9 @@ class Magi2DataProxy:
                     audio_feat_len=_to_int(data.audio_feat_len[i]),
                     txt_feat=text_tokens[i],
                     txt_feat_len=_to_int(data.txt_feat_len[i]),
+                    ref_image_feats=ref_image_feats_i,
+                    ref_image_feat_lens=ref_image_feat_lens_i,
+                    ref_image_special_tokens=ref_image_special_tokens_i,
                     t=t,
                     h=h,
                     w=w,
@@ -608,5 +709,5 @@ class Magi2DataProxy:
         pad_size = self.get_saved_data("pad_size")
         if pad_size > 0:
             x = x[:-pad_size]
-        x_video, x_audio = packed.unpack_token_sequence(x)
+        x_video, x_audio = packed.depack_token_sequence(x)
         return x_video, x_audio

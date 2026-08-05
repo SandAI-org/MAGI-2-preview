@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
+import re
 from dataclasses import dataclass
 from typing import Literal, Optional
 
@@ -32,19 +34,35 @@ from inference.pipeline.audio_decoder import SAAudioFeatureExtractor, resample_a
 
 
 
-def _parity_dump(name, tensor):
-    d = os.environ.get("PARITY_LATENT_DIR")
-    if not d or not psm.is_group_first_rank("cp"):
-        return
-    os.makedirs(d, exist_ok=True)
-    p = os.path.join(d, f"{name}.pt")
-    torch.save(tensor.detach().cpu(), p)
-    print_rank_0(f"[magi2 parity] saved {name} shape={tuple(tensor.shape)} -> {p}")
-
-
 from .preview_data_proxy import Magi2DataProxy
 from .sampler import Magi2PreviewSampler, FlowUniPCMultistepScheduler
 from .preview_data_proxy import CFGConfig, SamplerInput
+
+DEFAULT_NEGATIVE_PROMPT = (
+    "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, "
+    "overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly "
+    "drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy "
+    "background, three legs, many people in the background, walking backwards"
+)
+DEFAULT_NEGATIVE_PROMPT += (
+    ", low quality, worst quality, poor quality, noise, background noise, hiss, hum, buzz, crackle, static, "
+    "compression artifacts, MP3 artifacts, digital clipping, distortion, muffled, muddy, unclear, echo, reverb, "
+    "room echo, over-reverberated, hollow sound, distant, washed out, harsh, shrill, piercing, grating, tinny, "
+    "thin sound, boomy, bass-heavy, flat EQ, over-compressed, abrupt cut, jarring transition, sudden silence, "
+    "looping artifact, music, instrumental, sirens, alarms, crowd noise, unrelated sound effects, chaotic, "
+    "disorganized, messy, cheap sound"
+)
+DEFAULT_NEGATIVE_PROMPT += (
+    ", emotionless, flat delivery, deadpan, lifeless, apathetic, robotic, mechanical, monotone, flat intonation, "
+    "undynamic, boring, reading from a script, AI voice, synthetic, text-to-speech, TTS, insincere, fake emotion, "
+    "exaggerated, overly dramatic, melodramatic, cheesy, cringey, hesitant, unconfident, tired, weak voice, "
+    "stuttering, stammering, mumbling, slurred speech, mispronounced, bad articulation, lisp, vocal fry, creaky "
+    "voice, mouth clicks, lip smacks, wet mouth sounds, heavy breathing, audible inhales, plosives, p-pops, "
+    "coughing, clearing throat, sneezing, speaking too fast, rushed, speaking too slow, dragged out, unnatural "
+    "pauses, awkward silence, choppy, disconnected, multiple speakers, two voices, background talking, out of tune, "
+    "off-key, autotune artifacts"
+)
+NEGATIVE_PROMPT = os.environ.get("NEGATIVE_PROMPT", DEFAULT_NEGATIVE_PROMPT)
 
 
 @dataclass
@@ -64,21 +82,24 @@ class EvalInput:
 EvalTaskType = Literal["image2video", "text2video"]
 
 
-def resize_crop(image: Image.Image, th: int, tw: int):
+def resizepad(image: Image.Image, th: int, tw: int) -> Image.Image:
+    """Fit the image inside a th x tw canvas, letterboxing instead of cropping.
+
+    The image conditions the whole clip rather than becoming its first frame, so
+    losing the edges to a crop would throw away cues the model is meant to copy.
+    """
     w, h = image.size
-    if w == tw and h == th:
-        return image
-    if h / w > th / tw:
-        new_w = int(w)
-        new_h = int(new_w * th / tw)
-    else:
-        new_h = int(h)
-        new_w = int(new_h * tw / th)
-    left = (w - new_w) / 2
-    top = (h - new_h) / 2
-    right = (w + new_w) / 2
-    bottom = (h + new_h) / 2
-    return image.crop((left, top, right, bottom))
+    if w <= 0 or h <= 0:
+        raise ValueError(f"Invalid image size, width: {w}, height: {h}")
+    scale = min(tw / w, th / h)
+    target_w = max(1, int(round(w * scale)))
+    target_h = max(1, int(round(h * scale)))
+    resized = image.convert("RGB").resize(
+        (target_w, target_h), resample=Image.Resampling.LANCZOS
+    )
+    canvas = Image.new("RGB", (tw, th), (255, 255, 255))
+    canvas.paste(resized, ((tw - target_w) // 2, (th - target_h) // 2))
+    return canvas
 
 
 class Magi2InferenceEngine:
@@ -130,10 +151,13 @@ class Magi2InferenceEngine:
         self.txt_model_path = config.txt_model_path
 
         self.audio_latent_dim = 64
+        self.ref_image_type = config.ref_image_type
         self.audio_vae = SAAudioFeatureExtractor(config.audio_model_path) if psm.is_group_first_rank("cp") else None
 
         self.video_scheduler = FlowUniPCMultistepScheduler()
         self.audio_scheduler = FlowUniPCMultistepScheduler()
+        self.use_negative_prompt = config.use_negative_prompt
+        self.negative_prompt = NEGATIVE_PROMPT
         self.cfg_config = CFGConfig(
             use_cfg_trick=config.use_cfg_trick,
             cfg_trick_start_frame=config.cfg_trick_start_frame,
@@ -143,13 +167,21 @@ class Magi2InferenceEngine:
             dynamic_cfg_cutoff_value=config.dynamic_cfg_cutoff_value,
             video_txt_guidance_scale=config.video_txt_guidance_scale,
             audio_txt_guidance_scale=config.audio_txt_guidance_scale,
+            use_ref_for_uncond=config.use_ref_for_uncond,
             use_skimmed_cfg_linear=config.use_skimmed_cfg_linear,
             skimmed_cfg_scale=config.skimmed_cfg_scale,
             cfg_rescale=config.cfg_rescale,
         )
-        if self.cfg_config.use_skimmed_cfg_linear or self.cfg_config.cfg_rescale > 0:
+        if (
+            self.use_negative_prompt
+            or self.cfg_config.use_ref_for_uncond
+            or self.cfg_config.use_skimmed_cfg_linear
+            or self.cfg_config.cfg_rescale > 0
+        ):
             print_rank_0(
                 "[magi2 cfg] "
+                f"use_negative_prompt={self.use_negative_prompt}, "
+                f"use_ref_for_uncond={self.cfg_config.use_ref_for_uncond}, "
                 f"use_skimmed_cfg_linear={self.cfg_config.use_skimmed_cfg_linear}, "
                 f"skimmed_cfg_scale={self.cfg_config.skimmed_cfg_scale}, "
                 f"cfg_rescale={self.cfg_config.cfg_rescale}"
@@ -216,23 +248,154 @@ class Magi2InferenceEngine:
         return self.text_embedding_broadcaster.broadcast(embedding)
 
     def get_null_feature(self) -> torch.Tensor:
-        return torch.zeros(1, 0, 5120, dtype=self.dtype, device=self.device)
+        """Unconditional text feature for CFG.
 
-    def encode_image(
-        self, image: str | Image.Image, height: int, width: int
+        When ``use_negative_prompt`` is set, encode the shared negative prompt
+        (overridable via ``NEGATIVE_PROMPT``). Otherwise fall back to an empty
+        embedding, matching the athena gaga4 evaluator.
+        """
+        if self.use_negative_prompt:
+            return self.get_text_embedding(self.negative_prompt)
+        if self.config.txt_encoder_type == "qwen35":
+            return torch.zeros(1, 0, 5120, dtype=self.dtype, device=self.device)
+        return torch.zeros(1, 0, 3584, dtype=self.dtype, device=self.device)
+
+    @staticmethod
+    def _parse_image_paths(image: Optional[str | Image.Image]) -> dict:
+        """Normalize the caller's value into a ``{"<Figure N>": image}`` mapping.
+
+        A single path (or an already-loaded image) is the common case and is
+        promoted to ``<Figure 1>``; a JSON object lets a caller name several
+        images and line them up with the tokens they wrote into the prompt.
+        """
+        if image is None:
+            return {}
+        if not isinstance(image, str):
+            return {"<Figure 1>": image}
+        value = image.strip()
+        if not value:
+            return {}
+        if value.startswith("{"):
+            return {str(k): str(v) for k, v in json.loads(value).items()}
+        return {"<Figure 1>": value}
+
+    @staticmethod
+    def _parse_figure_id(token_key: str) -> int:
+        match = re.search(r"\d+", token_key)
+        return int(match.group()) if match else 1
+
+    @staticmethod
+    def _ensure_figure_tokens(prompt: str, figure_ids: list[int]) -> str:
+        """Make sure every conditioning image is addressed from the prompt.
+
+        The per-image embedding is pooled over its ``<Figure N>`` span, so an
+        image whose token never appears would be prefixed with a zero vector and
+        silently stop conditioning anything.
+        """
+        # Structured prompts carry the reference hint as a JSON field; fall back to
+        # plain-text concatenation when the prompt is not a JSON object.
+        try:
+            prompt_obj = json.loads(prompt)
+            if not isinstance(prompt_obj, dict):
+                raise ValueError("prompt JSON is not an object")
+            prompt_obj["reference_layer"] = ["The first frame refers to <Figure 1>"]
+            prompt = json.dumps(prompt_obj, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            prompt += 'reference_layer:The first frame refers to <Figure 1>'
+        return prompt
+
+    def _encode_image(
+        self,
+        image: str | Image.Image,
+        resize_type: Literal["square", "original"],
+        height: int,
+        width: int,
     ) -> torch.Tensor:
         if self.image_broadcaster.is_src_rank:
-            image = load_image(image)
-            image = resize_crop(image, height, width)
-            image = self.video_processor.preprocess(image, height=height, width=width)
-            image = image.to(device=self.device, dtype=self.dtype).unsqueeze(2)
-            image = image[:, :3]
+            pil_img = load_image(image)
+            if resize_type == "square":
+                target_h, target_w = 320, 320
+            elif resize_type == "original":
+                # Scale the long edge to the generation size so the image is
+                # sampled at roughly the same detail level as the output.
+                # video_processor.preprocess floors both sides to a multiple of
+                # vae_scale_factor, so no extra alignment is needed here.
+                max_length = max(height, width)
+                if pil_img.width > pil_img.height:
+                    target_w = max_length
+                    target_h = int(pil_img.height * max_length / pil_img.width)
+                else:
+                    target_h = max_length
+                    target_w = int(pil_img.width * max_length / pil_img.height)
+            else:
+                raise ValueError(f"Invalid ref_image_type: {resize_type}")
+
+            img = resizepad(pil_img, target_h, target_w)
+            img = self.video_processor.preprocess(img, height=target_h, width=target_w)
+            img = img.to(device=self.device, dtype=self.dtype).unsqueeze(2)
+            img = img[:, :3]
             OffloadUtils.maybe_load(self.vae, self._vae_mode, self.device)
-            latent = self.vae.encode(image.float())
+            latent = self.vae.encode(img.float())
             OffloadUtils.maybe_offload(self.vae, self._vae_mode)
         else:
             latent = None
         return self.image_broadcaster.broadcast(latent)
+
+    def _encode_images(self, image: Optional[str | Image.Image], height: int, width: int):
+        """Encode every conditioning image into the layout the proxy expects.
+
+        Returns ``(feat, feat_len, ids)`` where feat is ``(1, M, C, 1, H, W)``,
+        feat_len holds the latent ``(H, W)`` per image, and ids are the figure
+        numbers used to look the matching special token up in the prompt.
+        """
+        image_dict = self._parse_image_paths(image)
+        if not image_dict:
+            return None, None, None
+
+        feats = []
+        figure_ids = []
+        for token_key in sorted(image_dict.keys()):
+            feats.append(
+                self._encode_image(
+                    image_dict[token_key], self.ref_image_type, height, width
+                )
+            )
+            figure_ids.append(self._parse_figure_id(token_key))
+
+        ref_image_feat = torch.stack([f.squeeze(0) for f in feats], dim=0).unsqueeze(0)
+        num_images = ref_image_feat.shape[1]
+        latent_h = int(ref_image_feat.shape[4])
+        latent_w = int(ref_image_feat.shape[5])
+        ref_image_feat_len = torch.tensor(
+            [[[latent_h, latent_w]] * num_images], dtype=torch.long
+        )
+        ref_image_ids = torch.tensor([figure_ids], dtype=torch.long)
+        print_rank_0(
+            f"[magi2] images: {tuple(ref_image_feat.shape)}, ids={figure_ids}"
+        )
+        return ref_image_feat, ref_image_feat_len, ref_image_ids
+
+    def get_special_token(
+        self, prompt: str, figure_ids: torch.Tensor, text_feature: torch.Tensor
+    ) -> torch.Tensor:
+        """Pool the prompt embedding over each ``<Figure N>`` token span.
+
+        The image patches are prefixed by this embedding, which is how the model
+        learns which prompt mention a given image belongs to.
+        """
+        target_strs = [f"<Figure {int(i)}>" for i in figure_ids.reshape(-1).tolist()]
+        print_rank_0(f"[magi2] image special tokens: {target_strs}")
+        if self.text_embedding_broadcaster.is_src_rank:
+            assert _text_encoder_cache is not None, "Text encoder not initialized"
+            OffloadUtils.maybe_load(_text_encoder_cache, self._text_enc_mode, self.device)
+            special_token = _text_encoder_cache.get_special_token(
+                prompt, target_strs, text_feature
+            )
+            OffloadUtils.maybe_offload(_text_encoder_cache, self._text_enc_mode)
+            special_token = special_token.to(device=self.device, dtype=self.dtype)
+        else:
+            special_token = None
+        return self.text_embedding_broadcaster.broadcast(special_token)
 
     @torch.inference_mode()
     def evaluate(
@@ -247,7 +410,6 @@ class Magi2InferenceEngine:
         refiner_width: Optional[int] = None,
         refiner_height: Optional[int] = None,
         magi2_refiner_num_inference_steps: Optional[int] = None,
-        persona_path: Optional[str] = None,
     ):
 
         OffloadUtils.maybe_load(self.model, self._preview_mode, self.device)
@@ -265,15 +427,15 @@ class Magi2InferenceEngine:
         if eval_task_type == "text2video":
             image = None
 
-        first_frame_feat = (
-            self.encode_image(image, height, width) if image is not None else None
-        )
-        _parity_dump("post_encode", first_frame_feat)
-        ref_video_feat = (
-            self.encode_image(persona_path, 320, 320)
-            if persona_path is not None
-            else None
-        )
+        (
+            ref_image_feat,
+            ref_image_feat_len,
+            ref_image_ids,
+        ) = self._encode_images(image, height, width)
+        if ref_image_ids is not None:
+            prompt = self._ensure_figure_tokens(
+                prompt, ref_image_ids.reshape(-1).tolist()
+            )
 
         if self._text_enc_mode == OffloadMode.ROUNDTRIP:
             OffloadUtils.offload(self.model)
@@ -281,6 +443,11 @@ class Magi2InferenceEngine:
 
         context = self.get_text_embedding(prompt)
         context_null = self.get_null_feature()
+        ref_image_special_tokens = (
+            self.get_special_token(prompt, ref_image_ids, context).unsqueeze(0)
+            if ref_image_ids is not None
+            else None
+        )
 
         if self._text_enc_mode == OffloadMode.ROUNDTRIP:
             torch.cuda.empty_cache()
@@ -308,7 +475,6 @@ class Magi2InferenceEngine:
             device=self.device,
         )
 
-
         ref_audio_feat = torch.zeros(
             1, 0, self.audio_latent_dim, dtype=torch.float32, device=self.device
         )
@@ -328,23 +494,21 @@ class Magi2InferenceEngine:
             txt_feat=context,
             null_txt_feat=context_null,
             ref_audio_feat=ref_audio_feat,
-            ref_video_feat=ref_video_feat,
-            first_frame_feat=first_frame_feat,
+            ref_video_feat=None,
             video_scheduler=self.video_scheduler,
             audio_scheduler=self.audio_scheduler,
             cfg_config=self.cfg_config,
+            ref_image_feat=ref_image_feat,
+            ref_image_feat_len=ref_image_feat_len,
+            ref_image_special_token_embedding=ref_image_special_tokens,
         )
 
         torch.cuda.reset_peak_memory_stats()
         print_mem_info_rank_0("[magi2] before preview denoise")
         latent, latent_audio = self.sampler.sample(sampler_input)
         print_mem_info_rank_0("[magi2] after preview denoise")
-        _parity_dump("post_preview", latent)
 
         OffloadUtils.maybe_offload(self.model, self._preview_mode)
-
-        if first_frame_feat is not None:
-            latent[:, :, :1] = first_frame_feat[:, :, :1]
 
         use_magi2_refiner = all(
             [
@@ -358,14 +522,12 @@ class Magi2InferenceEngine:
             latent, _refiner_audio = self.evaluate_magi2_refiner_with_latent(
                 context=context,
                 context_null=context_null,
-                image=image,
                 latent_video=latent,
                 latent_audio=latent_audio,
                 refiner_width=refiner_width,
                 refiner_height=refiner_height,
                 magi2_refiner_num_inference_steps=magi2_refiner_num_inference_steps,
             )
-            _parity_dump("post_refiner", latent)
 
         result = self.post_process(latent, latent_audio)
         return result
@@ -399,7 +561,6 @@ class Magi2InferenceEngine:
         self,
         context: torch.Tensor,
         context_null: torch.Tensor,
-        image: Optional[str | Image.Image],
         latent_video: torch.Tensor,
         latent_audio: torch.Tensor,
         refiner_width: int,
@@ -426,31 +587,12 @@ class Magi2InferenceEngine:
             f"steps={magi2_refiner_num_inference_steps}"
         )
 
-        first_frame_feat = (
-            self.encode_image(image, refiner_height, refiner_width) if image is not None else None
-        )
         latent_video = torch.nn.functional.interpolate(
             latent_video,
             size=(latent_video.shape[2] * 2 - 1, refiner_latent_height, refiner_latent_width),
             mode="trilinear",
             align_corners=True,
         )
-        refiner_latent_frames = latent_video.shape[2]
-        min_latent_frames = self.config.magi2_refiner_min_latent_frames
-        if min_latent_frames > refiner_latent_frames:
-            latent_video = torch.cat(
-                [
-                    latent_video,
-                    latent_video[:, :, -1:].repeat(
-                        1, 1, min_latent_frames - refiner_latent_frames, 1, 1
-                    ),
-                ],
-                dim=2,
-            )
-            print_rank_0(
-                f"[magi2 refiner] temporal pad {refiner_latent_frames} "
-                f"-> {latent_video.shape[2]}"
-            )
         if self.config.magi2_refiner_noise_value != 0:
             noise = torch.randn_like(latent_video, device=latent_video.device)
             sigmas = self.magi2_refiner_sigmas.to(latent_video.device)
@@ -501,9 +643,6 @@ class Magi2InferenceEngine:
         print_mem_info_rank_0("[magi2] before refiner denoise")
 
         for step_idx, t in enumerate(video_scheduler.timesteps, start=1):
-            if first_frame_feat is not None:
-                latent_video[:, :, :1] = first_frame_feat[:, :, :1]
-
             if use_uncond_only:
                 v_cfg_video, v_cfg_audio = self._forward_magi2_refiner(
                     latent_video=latent_video,
@@ -535,9 +674,6 @@ class Magi2InferenceEngine:
                     v_cfg_audio, t, magi2_refiner_audio_latent, return_dict=False
                 )[0]
 
-            if first_frame_feat is not None:
-                latent_video[:, :, :1] = first_frame_feat[:, :, :1]
-
             print_rank_0(
                 f"[magi2 refiner] REFINER_STEP_DONE {step_idx}/{len(video_scheduler.timesteps)}"
             )
@@ -545,8 +681,6 @@ class Magi2InferenceEngine:
         print_mem_info_rank_0("[magi2] after refiner denoise")
 
         OffloadUtils.maybe_offload(self.magi2_refiner, self._refiner_mode)
-        if latent_video.shape[2] > refiner_latent_frames:
-            latent_video = latent_video[:, :, :refiner_latent_frames].contiguous()
         return latent_video, magi2_refiner_audio_latent
 
     def decode_audio(self, audio_latent: torch.Tensor):
@@ -561,15 +695,12 @@ class Magi2InferenceEngine:
         OffloadUtils.maybe_load(self.vae, self._vae_mode, self.device)
         if hasattr(self, "turbo_vae"):
             OffloadUtils.maybe_load(self.turbo_vae, self._vae_mode, self.device)
-        _parity_dump("pre_vae", z)
 
         decoded = (
             self.turbo_vae.decode(z).float()
             if psm.is_group_first_rank("cp")
             else None
         )
-        if decoded is not None:
-            _parity_dump("post_vae", decoded)
         OffloadUtils.maybe_offload(self.vae, self._vae_mode)
         if hasattr(self, "turbo_vae"):
             OffloadUtils.maybe_offload(self.turbo_vae, self._vae_mode)

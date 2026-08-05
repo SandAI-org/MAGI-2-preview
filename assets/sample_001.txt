@@ -1,4 +1,192 @@
-Identify the prominent specific IP name/subject in the video as <Man in Suit>, a male character archetype defined by formal attire and authoritative demeanor. The visual style employs high-key indoor cinematography with soft diffusion filters, creating a clean aesthetic dominated by white drapery textures and warm ambient yellow lighting. The narrative centers on a confrontation at a wedding venue involving three distinct individuals. Static details include the man wearing clear-rimmed glasses, a black double-breasted suit jacket over a black shirt, and a dark tie; his hair is styled in a voluminous swept-back manner. He stands adjacent to a woman in a white off-the-shoulder gown and veil, identified as the bride. Another female figure wears a patterned blouse featuring irregular black brushstrokes on a white background. Dynamic evolution begins with the woman in the patterned blouse speaking with an open mouth and expressive facial gestures directed toward the couple. The camera cuts between her profile and close-ups of the groom. As the sequence progresses, the man maintains a stoic expression, looking slightly upward and away, suggesting he is listening to accusations regarding prior misconduct. His posture remains rigid and upright throughout the interaction, indicating tension within the social setting. No significant physical contact occurs, emphasizing verbal conflict rather than physical altercation. Lighting reflects softly off the glass frames of his eyewear, highlighting the polished nature of the production design. Transitions occur rapidly via direct cuts without fades, shifting focus between the accuser and the accused parties. Micro-expressions reveal subtle shifts in the man’s gaze direction, implying internal processing of the situation. The environment suggests a staged celebration space, likely a banquet hall or reception area, characterized by draped fabric elements and neutral-toned walls. All subjects occupy fixed positions relative to one another during their respective shots, reinforcing the structured composition typical of dramatic storytelling formats.
-Content and Timestamps of Active Speakers:是，叔侄俩娶同一个女人，江家的脸要往哪儿搁？江哲犯错在先。 [speaker00<0.0-0.1>,speaker01<0.2-4.1>,speaker00<4.4-5.8>]
-Video Transition Timestamps:[2.3,4.2]
-Content and Positions of OCR-Recognized Subtitles:[是啊，叔侄俩娶同一个女人<0.5-1.5>[31,76,83,80],薑家的脸要往哪搁<3.0-4.0>[26,76,71,80],姜哲犯错在先<4.5-5.5>[33,76,67,80]]
+# global_caption
+
+core_caption:A 10-second stop-motion style 3D clay animation where a small clay figure searches a cozy room for a lost red ball, eventually finding it at his feet, beginning with a close-up of an empty clay plate.
+format_and_structure:A continuous narrative short film with dynamic camera tracking and precise framing adjustments, mimicking the tactile, staccato motion of handmade stop-motion animation.
+narrative_and_emotional_design:Warm, innocent, and lighthearted. The emotional arc progresses from sudden surprise, to clumsy searching, mild disappointment, and finally joyful relief.
+visual_design:The starting state establishes a tactile 3D claymation aesthetic featuring a white-rimmed clay plate on a terracotta surface, illuminated by a warm yellow lamp. The environment features pastel blue walls, a wooden floor, and soft volumetric lighting. The materials display handmade imperfections, such as subtle thumbprints, minor dents, and uneven edges.
+audio_design:Cheerful, warm ukulele and xylophone background music, layered with animated Foley including clay footsteps, soft thuds of interacting objects, a rolling ball, and a short, expressive character gasp. No dialogue.
+
+continuity_requirements:Strictly maintain the lighting, color, and texture of the starting plate and terracotta surface throughout the initial camera movement. | The clay figure must maintain consistent proportions: a large round head, small body, black dot eyes, yellow knit vest, blue shorts, and red shoes. | Character movements must exhibit rigid, stiff-jointed articulation typical of stop-motion, completely avoiding fluid CGI morphing or limb stretching. | The physical volume of the red ball and blue button must remain constant when handled.
+
+# reference_bank
+
+## reference_bank1
+
+reference_identifier:empty_plate_and_surface
+reference_type:object
+label:Starting Empty Plate
+role:The visual anchor and starting point of the scene.
+description:A shallow, white/light-blue tinted clay plate resting on a larger terracotta-colored clay base.
+appearance_or_design:Features heavy tactile clay textures, subtle indentations, slightly uneven edges, illuminated by a warm yellow light source from the upper left.
+
+## reference_bank2
+
+reference_identifier:clay_figure
+reference_type:character
+label:Clay Figure
+role:The main protagonist searching for the ball.
+description:A clumsy but cute anthropomorphic clay character with exaggerated proportions.
+appearance_or_design:Round head, small body, short limbs, black dot eyes, small nose, simple mouth. Wears a textured yellow knit-style clay vest, blue shorts, and red shoes. Surface has visible fingerprint textures.
+
+## reference_bank3
+
+reference_identifier:red_ball
+reference_type:object
+label:Red Ball
+role:The lost object being searched for.
+description:A small, perfectly spherical clay ball.
+appearance_or_design:Bright red clay material with subtle matte finish and slight surface imperfections.
+
+## reference_bank4
+
+reference_identifier:blue_button
+reference_type:object
+label:Blue Button
+role:A misleading object found during the search.
+description:A flat, round object resembling a clothing button.
+appearance_or_design:Pastel blue clay sculpted to look like a button with thread holes in the center.
+
+## reference_bank5
+
+reference_identifier:room_environment
+reference_type:setting
+label:Cozy Clay Room
+role:The physical space where the action occurs.
+description:A warm, miniature-style room constructed of clay.
+appearance_or_design:Features textured wooden floorboards, pastel blue walls, a small bookshelf filled with colorful clay books, and a warm yellow desk lamp casting soft shadows.
+
+# shot_timeline
+
+## shot_timeline1
+
+shot_identifier:shot_01_discovery
+
+time_range_seconds:0.0 | 2.0
+scene_reference_identifier:room_environment
+shot_caption:The camera tilts up from the empty plate to reveal the clay figure reacting with surprise.
+camera_lighting_and_composition:Starts perfectly locked on the input image's composition of the plate and warm light. The camera smoothly tilts up and slightly pulls back to reveal the figure standing by the table. Volumetric warm light remains consistent.
+motion_and_physical_logic:The figure looks down at the plate. His black dot eyes widen, his clay mouth shifts into a small 'O' shape, and he rapidly brings his stubby hands to his cheeks. His upper body leans backward in a rigid, startle response, shifting his center of gravity without deforming his legs.
+
+reference_identifiers:empty_plate_and_surface | clay_figure | room_environment
+
+audio_event_identifiers:bgm_track | sfx_gasp
+
+## shot_timeline2
+
+shot_identifier:shot_02_search
+
+time_range_seconds:2.0 | 5.0
+scene_reference_identifier:room_environment
+shot_caption:The camera follows the figure as he searches the room and clumsily interacts with a book.
+camera_lighting_and_composition:The camera tracks backward and pans laterally, maintaining a medium shot as it follows the figure's trajectory toward the bookshelf.
+motion_and_physical_logic:The figure waddles with a clumsy, side-to-side weight transfer. He crouches near the bookshelf, his joints articulating stiffly. His hand accidentally collides with a clay book, causing it to tip outward. He rapidly darts his hands forward to push the book upright, demonstrating tactile weight-bearing physics.
+
+reference_identifiers:clay_figure | room_environment
+
+audio_event_identifiers:bgm_track | sfx_footsteps | sfx_book_thud
+
+## shot_timeline3
+
+shot_identifier:shot_03_false_hope
+
+time_range_seconds:5.0 | 7.0
+scene_reference_identifier:room_environment
+shot_caption:A close-up of the figure's face as he finds the blue button and looks disappointed.
+camera_lighting_and_composition:The camera swiftly pushes in for a close-up on the figure's face and upper torso, focusing on his facial features and the object in his hands.
+motion_and_physical_logic:Holding the blue button, his wide sculpted smile smoothly transitions downward into a frown. His clay eyelids perform a single blink, and he executes a rigid shrug by lifting his shoulders straight up and down. He places the button back down out of frame.
+
+reference_identifiers:clay_figure | blue_button | room_environment
+
+audio_event_identifiers:bgm_track
+
+## shot_timeline4
+
+shot_identifier:shot_04_found_it
+
+time_range_seconds:7.0 | 9.0
+scene_reference_identifier:room_environment
+shot_caption:The camera pulls back as the figure turns, spots the rolling red ball, and excitedly picks it up.
+camera_lighting_and_composition:The camera pulls back to a medium-wide shot to capture the floor space. The warm desk lamp creates long, soft shadows across the wooden texture.
+motion_and_physical_logic:The figure pivots on his heel. The red ball rolls smoothly across the floorboards, obeying friction, and bumps gently against his red shoe. He raises both arms, performs a stiff-legged hop that briefly suspends him in the air, and bends rapidly at the waist to scoop up the ball.
+
+reference_identifiers:clay_figure | red_ball | room_environment
+
+audio_event_identifiers:bgm_track | sfx_ball_roll | sfx_hop_thud
+
+## shot_timeline5
+
+shot_identifier:shot_05_happy_ending
+
+time_range_seconds:9.0 | 10.0
+scene_reference_identifier:room_environment
+shot_caption:The figure sits on the floor hugging the ball, smiling warmly as the camera pushes in.
+camera_lighting_and_composition:A slow, stabilizing push-in toward the seated figure. The warm yellow lamp light wraps around his face, highlighting the fingerprint textures.
+motion_and_physical_logic:The figure drops into a seated position on the floor, crossing his short legs. He hugs the red ball tightly to his chest. His mouth forms a wide, contented smile, and his body settles into a static, happy pose with subtle simulated breathing.
+
+reference_identifiers:clay_figure | red_ball | room_environment
+
+audio_event_identifiers:bgm_track
+
+# audio_event_timeline
+
+## audio_event_timeline1
+
+audio_event_identifier:bgm_track
+event_type:music
+
+time_range_seconds:0.0 | 10.0
+source_reference_identifier:room_environment
+audio_caption:A cheerful, warm, and relaxing instrumental track featuring a ukulele and xylophone playing an upbeat, childish melody.
+synchronization_note:Plays consistently throughout the video to establish a lighthearted tone.
+
+## audio_event_timeline2
+
+audio_event_identifier:sfx_gasp
+event_type:sound effect
+
+time_range_seconds:1.0 | 1.5
+source_reference_identifier:clay_figure
+audio_caption:A short, cute, and sharp intake of breath indicating surprise.
+synchronization_note:Sync exactly with the figure's eyes widening and leaning back from the plate.
+
+## audio_event_timeline3
+
+audio_event_identifier:sfx_footsteps
+event_type:sound effect
+
+time_range_seconds:2.0 | 4.0
+source_reference_identifier:clay_figure
+audio_caption:Light, rhythmic pitter-patter of solid clay feet walking on hollow wooden floorboards.
+synchronization_note:Sync with the figure's waddling steps as he moves from the table to the bookshelf.
+
+## audio_event_timeline4
+
+audio_event_identifier:sfx_book_thud
+event_type:sound effect
+
+time_range_seconds:4.2 | 4.8
+source_reference_identifier:room_environment
+audio_caption:A soft, muffled thud of a heavy clay object hitting another clay surface, followed by a sliding friction sound.
+synchronization_note:Sync with the book tipping over and the figure's hands catching and pushing it back.
+
+## audio_event_timeline5
+
+audio_event_identifier:sfx_ball_roll
+event_type:sound effect
+
+time_range_seconds:7.0 | 7.5
+source_reference_identifier:red_ball
+audio_caption:A continuous, slightly uneven rolling sound of a heavy clay sphere moving across wood, ending with a gentle tap.
+synchronization_note:Sync with the red ball entering the frame and hitting the figure's shoe.
+
+## audio_event_timeline6
+
+audio_event_identifier:sfx_hop_thud
+event_type:sound effect
+
+time_range_seconds:8.0 | 8.5
+source_reference_identifier:clay_figure
+audio_caption:A double tap of clay landing on wood, followed by a slight rustling sound.
+synchronization_note:Sync with the figure's stiff-legged hop and landing.
+
+generation_requirements:The initial frame's composition, including the empty plate and warm yellow lighting, is the absolute baseline and must not be altered; camera movement must logically originate from this exact viewpoint. | Enforce a strict 3D claymation aesthetic; surfaces must feature distinct handmade textures like thumbprints, press marks, and slight irregularities. | Motion must simulate physical stop-motion animation, incorporating precise joint articulation, cause-and-effect weight distribution, and a subtle step-by-step staccato rhythm rather than perfectly smooth CGI fluidity. | Under no circumstances should the character's limbs stretch, morph, or exhibit organic flesh-like distortion during movement. | Do not introduce photorealistic textures, sleek plastic surfaces, glowing particle effects, or any modern electronic devices into the environment.
