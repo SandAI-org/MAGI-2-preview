@@ -1,0 +1,4 @@
+A group of young dancers perform synchronized choreography indoors, wearing matching gray outfits and white sneakers, moving energetically with arm swings and leg kicks while smiling at the camera.
+Content and Timestamps of Active Speakers:Oh, oh, oh.[]
+Video Transition Timestamps:[3.4,4.6]
+Content and Positions of OCR-Recognized Subtitles:[QLO<4.5-5.0>[0,64,1,67],JNI<1.0-1.5>[0,62,0,65] <4.5-5.0>[0,62,0,65],DiNO<3.5-4.0>[14,2,57,11] <4.5-5.5>[64,29,84,32],Khúc này sao thé?<3.5-4.0>[3,79,61,83],DAOKHU<4.5-5.5>[92,28,100,32]]

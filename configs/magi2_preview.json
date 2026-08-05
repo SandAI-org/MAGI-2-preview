@@ -1,0 +1,135 @@
+{
+  "engine_config": {
+    "seed": 42,
+    "load": "${MAGI2_CKPT_ROOT}/magi2_preview",
+    "distributed_backend": "nccl",
+    "cp_size": 8,
+    "ep_size": 8,
+    "cp_strategy": "cp_ulysses"
+  },
+  "arch_config": {
+    "num_layers": 40,
+    "hidden_size": 3072,
+    "head_dim": 128,
+    "num_query_groups": 24,
+    "video_in_channels": 48,
+    "audio_in_channels": 64,
+    "text_in_channels": 5120,
+    "params_dtype": "bfloat16",
+    "intermediate_factor": 4,
+    "mm_layers": [
+      0,
+      1,
+      38,
+      39
+    ],
+    "activation_type": "swiglu7",
+    "attn_softcap": -1.0,
+    "attn_gating": {
+      "enable": true
+    },
+    "attn_sinks": {
+      "enable": true,
+      "sink_token_num": 1
+    },
+    "mhc_config": {
+      "enable": true,
+      "num_stream": 4,
+      "alpha_init": 0.01
+    },
+    "moe_config": {
+      "num_experts": 256,
+      "top_k": 6,
+      "score_func": "sigmoid",
+      "route_norm": true,
+      "route_scale": 4.9,
+      "moe_layers": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37
+      ],
+      "expert_intermediate_size": 1280,
+      "shared_expert_intermediate_size": 1280,
+      "modality_specific_expert_intermediate_size": 1280,
+      "num_heads": 12
+    }
+  },
+  "evaluation_config": {
+    "fps": 12.5,
+    "shift": 9.0,
+    "vae_model_path": "${MAGI2_CKPT_ROOT}/Wan2.2-TI2V-5B",
+    "txt_model_path": "${MAGI2_CKPT_ROOT}/Qwen3.5-27B",
+    "vae_stride": [
+      8,
+      16,
+      16
+    ],
+    "patch_size": [
+      1,
+      1,
+      1
+    ],
+    "z_dim": 48,
+    "txt_encoder_type": "qwen35",
+    "video_txt_guidance_scale": 5.0,
+    "audio_txt_guidance_scale": 7.0,
+    "use_cfg_trick": false,
+    "cfg_trick_start_frame": 13,
+    "cfg_trick_value": 2.0,
+    "use_dynamic_cfg": false,
+    "dynamic_cfg_start_t": 500,
+    "dynamic_cfg_cutoff_value": 2.0,
+    "use_skimmed_cfg_linear": true,
+    "skimmed_cfg_scale": 3.0,
+    "cfg_rescale": 0.0,
+    "use_turbo_vae": true,
+    "student_config": "${MAGI2_CKPT_ROOT}/turbo_vae/TurboV3-Wan22-TinyShallow_7_7.json",
+    "student_ckpt": "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint-340000.ckpt",
+    "num_inference_steps": 100,
+    "data_proxy_config": {
+      "t_patch_size": 1,
+      "patch_size": 1,
+      "spatial_rope_interpolation": "extra",
+      "add_time_token": false,
+      "time_channel_dim": 64,
+      "time_aligned_rope": false,
+      "audio_latent_fps": 25.0,
+      "time_pos_fps": 3.125,
+      "vae_first_latent_is_image": true,
+      "video_fps": 25.0
+    }
+  }
+}

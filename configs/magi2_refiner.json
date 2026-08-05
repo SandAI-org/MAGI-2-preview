@@ -1,0 +1,103 @@
+{
+  "extends": "magi2_preview.json",
+  "magi2_refiner_arch_config": {
+    "num_layers": 30,
+    "hidden_size": 4096,
+    "head_dim": 128,
+    "num_query_groups": 8,
+    "video_in_channels": 48,
+    "audio_in_channels": 64,
+    "text_in_channels": 5120,
+    "checkpoint_qk_layernorm_rope": false,
+    "params_dtype": "bfloat16",
+    "mm_layers": [
+      0,
+      1,
+      28,
+      29
+    ],
+    "local_attn_layers": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+    ],
+    "enable_attn_gating": true,
+    "post_norm_layers": [],
+    "activation_type": "swiglu7"
+  },
+  "evaluation_config": {
+    "use_magi2_refiner": true,
+    "magi2_refiner_model_name": "magi2_refiner",
+    "magi2_refiner_model_path": "${MAGI2_CKPT_ROOT}/magi2_refiner",
+    "magi2_refiner_video_txt_guidance_scale": 2.0,
+    "magi2_refiner_audio_txt_guidance_scale": 5.0,
+    "magi2_refiner_noise_value": 220,
+    "magi2_refiner_vae_stride": [
+      4,
+      16,
+      16
+    ],
+    "magi2_refiner_patch_size": [
+      1,
+      1,
+      1
+    ],
+    "magi2_refiner_audio_noise_scale": -1.0,
+    "magi2_refiner_min_latent_frames": 63,
+    "magi2_refiner_data_proxy_config": {
+      "t_patch_size": 1,
+      "patch_size": 1,
+      "frame_receptive_field": 11,
+      "spatial_rope_interpolation": "extra",
+      "coords_style": "v1",
+      "text_offset": 0,
+      "magi2_refiner_condition_input": "none",
+      "attn_config": {
+        "mode": "window",
+        "block_t_size": 8,
+        "block_size": 4,
+        "window": {
+          "level": "block",
+          "block_mode": "grid",
+          "block_t_radius": 2,
+          "block_h_radius": 2,
+          "block_w_radius": 2,
+          "win_size": 384,
+          "frame_receptive_field": -1,
+          "auto_range_merge": true,
+          "sparse_load": false,
+          "full_attn_layers": []
+        }
+      }
+    },
+    "magi2_refiner_num_inference_steps": 5,
+    "magi2_refiner_shift": 5.0
+  }
+}
