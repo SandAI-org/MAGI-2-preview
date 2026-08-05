@@ -55,7 +55,7 @@ Building it yourself is only necessary to change a dependency version, or to
 work somewhere the registry is not reachable:
 
 ```bash
-docker build -t magi2:local .
+docker build -t magi-2-preview:local .
 ```
 
 ### From source
