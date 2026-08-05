@@ -82,25 +82,6 @@ class EvalInput:
 EvalTaskType = Literal["image2video", "text2video"]
 
 
-def resizepad(image: Image.Image, th: int, tw: int) -> Image.Image:
-    """Fit the image inside a th x tw canvas, letterboxing instead of cropping.
-
-    The image conditions the whole clip rather than becoming its first frame, so
-    losing the edges to a crop would throw away cues the model is meant to copy.
-    """
-    w, h = image.size
-    if w <= 0 or h <= 0:
-        raise ValueError(f"Invalid image size, width: {w}, height: {h}")
-    scale = min(tw / w, th / h)
-    target_w = max(1, int(round(w * scale)))
-    target_h = max(1, int(round(h * scale)))
-    resized = image.convert("RGB").resize(
-        (target_w, target_h), resample=Image.Resampling.LANCZOS
-    )
-    canvas = Image.new("RGB", (tw, th), (255, 255, 255))
-    canvas.paste(resized, ((tw - target_w) // 2, (th - target_h) // 2))
-    return canvas
-
 
 class Magi2InferenceEngine:
     def __init__(
@@ -307,30 +288,28 @@ class Magi2InferenceEngine:
     def _encode_image(
         self,
         image: str | Image.Image,
-        resize_type: Literal["square", "original"],
+        resize_type: Literal["resize", "short_edge_resize_crop"],
         height: int,
         width: int,
     ) -> torch.Tensor:
         if self.image_broadcaster.is_src_rank:
             pil_img = load_image(image)
-            if resize_type == "square":
-                target_h, target_w = 320, 320
-            elif resize_type == "original":
-                # Scale the long edge to the generation size so the image is
-                # sampled at roughly the same detail level as the output.
-                # video_processor.preprocess floors both sides to a multiple of
-                # vae_scale_factor, so no extra alignment is needed here.
-                max_length = max(height, width)
-                if pil_img.width > pil_img.height:
-                    target_w = max_length
-                    target_h = int(pil_img.height * max_length / pil_img.width)
-                else:
-                    target_h = max_length
-                    target_w = int(pil_img.width * max_length / pil_img.height)
+            if resize_type == "resize":
+                target_h, target_w = (height, width)
+                img = pil_img
+            elif resize_type == "short_edge_resize_crop":
+                target_h, target_w = (height, width)
+                src_w, src_h = pil_img.size
+                scale = max(target_w / src_w, target_h / src_h)
+                new_w = max(1, int(round(src_w * scale)))
+                new_h = max(1, int(round(src_h * scale)))
+                img = pil_img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
+                left = max(0, (new_w - target_w) // 2)
+                top = max(0, (new_h - target_h) // 2)
+                img = img.crop((left, top, left + target_w, top + target_h))
             else:
                 raise ValueError(f"Invalid ref_image_type: {resize_type}")
 
-            img = resizepad(pil_img, target_h, target_w)
             img = self.video_processor.preprocess(img, height=target_h, width=target_w)
             img = img.to(device=self.device, dtype=self.dtype).unsqueeze(2)
             img = img[:, :3]

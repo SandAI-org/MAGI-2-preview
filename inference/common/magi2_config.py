@@ -272,7 +272,7 @@ class EvaluationConfig(BaseModel):
         default_factory=lambda: _env_float("SKIMMED_CFG_SCALE", 5.0)
     )
     cfg_rescale: float = Field(default_factory=_cfg_rescale_default)
-    ref_image_type: Literal["square", "original"] = "original"
+    ref_image_type: Literal["resize", "short_edge_resize_crop"] = "short_edge_resize_crop"
 
     @field_validator("skimmed_cfg_scale", "cfg_rescale")
     @classmethod
