@@ -21,11 +21,6 @@ pipeline are described in [MAGI-2 Preview: Scaling Video Generation Models
 Efficiently](https://sand.ai/blog/magi-2-preview); the weights are on Hugging
 Face at [sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview).
 
-> [!NOTE]
-> The released weights are the **base model**, with no step distillation: a clip
-> takes 100 preview steps and 5 refiner steps. A **distilled** model that reaches
-> the same result in far fewer steps is coming.
-
 This repository is the inference code. It generates video from a text prompt
 (T2V) or from a prompt plus a still image (I2V), with sound generated alongside
 the video and muxed into the output file. Clips are 10 seconds long, which is
