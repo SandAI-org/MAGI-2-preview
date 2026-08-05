@@ -4,5 +4,6 @@
   {"prompt_file": "assets/sample_002.txt", "image": "assets/sample_002.png"},
   {"prompt_file": "assets/sample_000.txt"},
   {"prompt_file": "assets/sample_001.txt"},
-  {"prompt_file": "assets/sample_002.txt"}
+  {"prompt_file": "assets/sample_002.txt"},
+  {"prompt_file": "assets/sample_enhanced_t2v.json"}
 ]

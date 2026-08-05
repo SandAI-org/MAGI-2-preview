@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Generate 6 demo videos: 3 image-to-video + 3 text-to-video, single model load.
+# Generate the demo batch in assets/demo_samples.json with a single model load.
 #
-#   bash scripts/run_demo.sh                       # 1080p, 12s per clip
+#   bash scripts/run_demo.sh                       # 1080p
 #   RESOLUTION=540p bash scripts/run_demo.sh       # 540p preview only
-#   SECONDS_PER_VIDEO=12 bash scripts/run_demo.sh
+#   SAMPLES=my_samples.json bash scripts/run_demo.sh
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 RESOLUTION=${RESOLUTION:-1080p}
 OUTPUT_DIR=${OUTPUT_DIR:-output/demo}
-SECONDS_PER_VIDEO=${SECONDS_PER_VIDEO:-12}
+# 10s is the only duration the model supports.
+SECONDS_PER_VIDEO=10
 SEED=${SEED:-42}
 
 export PYTHONPATH="${PWD}:${PYTHONPATH:-}"
