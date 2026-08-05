@@ -28,6 +28,11 @@ the only duration the model currently supports. Generation runs in two stages:
 `magi2_preview` denoises the clip at low resolution, and `magi2_refiner` takes
 that result up to 1080p.
 
+What is released here is the base model, with no step distillation applied to
+either transformer. The preview stage takes 100 denoising steps and the refiner
+5, and that step count is where most of the wall-clock time goes. A distilled
+model, which reaches the same result in far fewer steps, is coming.
+
 ## Requirements
 
 - NVIDIA Hopper GPUs, 8 of them.
@@ -97,14 +102,17 @@ ckpt/
     └── checkpoint.ckpt
 ```
 
+Each directory name below links to the folder it comes from in the Hugging Face
+repository:
+
 | Directory | Size | Contents |
 | --- | --- | --- |
-| `preview` | 228 GB | Preview-stage transformer, released with MAGI-2 |
-| `text_encoder` | 56 GB | Text encoder, [Qwen/Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B) |
-| `refiner` | 14 GB | Refiner-stage transformer, released with MAGI-2 |
-| `stable-audio-open-1.0` | 5 GB | Audio VAE, decodes the generated audio latents |
-| `vae` | 3 GB | Video VAE, from [Wan-AI/Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B) |
-| `turbo_vae` | 2 GB | Distilled VAE decoder, used for decoding by default |
+| [`preview`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/preview) | 228 GB | Preview-stage transformer, released with MAGI-2 |
+| [`text_encoder`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/text_encoder) | 56 GB | Text encoder, [Qwen/Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B) |
+| [`refiner`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/refiner) | 14 GB | Refiner-stage transformer, released with MAGI-2 |
+| [`stable-audio-open-1.0`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/stable-audio-open-1.0) | 5 GB | Audio VAE, decodes the generated audio latents |
+| [`vae`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/vae) | 3 GB | Video VAE, from [Wan-AI/Wan2.2-TI2V-5B](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B) |
+| [`turbo_vae`](https://huggingface.co/sand-ai/MAGI-2-preview/tree/main/turbo_vae) | 2 GB | Distilled VAE decoder, used for decoding by default |
 
 The configs under [`configs/`](configs) reference these as
 `${MAGI2_CKPT_ROOT}/<name>`, and that variable defaults to `<repo>/ckpt`. To keep
