@@ -115,9 +115,9 @@ SAMPLES=my_samples.json bash scripts/run_demo.sh   # a different batch
 OUTPUT_DIR=output/run7 bash scripts/run_demo.sh
 ```
 
-The script reads `SAMPLES`, `OUTPUT_DIR`, `SEED` and `MASTER_PORT`, and nothing
-else. Videos land in `$OUTPUT_DIR/sample_000.mp4` and up, numbered by position
-in the batch.
+The script takes `SAMPLES`, `OUTPUT_DIR`, `SEED` and `MASTER_PORT` from the
+environment. Videos land in `$OUTPUT_DIR/sample_000.mp4` and up, numbered by
+position in the batch.
 
 A samples file is a JSON array with one entry per video. An entry carries its
 prompt inline as `prompt` or as a path in `prompt_file`, and a first frame in
@@ -132,11 +132,10 @@ torchrun --nproc_per_node=8 inference/pipeline/entry.py \
     --prompt "a red fox in snow" --output output/
 ```
 
-It also takes `--prompt-file`, `--image`, `--seed`, `--config`, the
-`--preview-width` / `--preview-height` and `--refiner-width` / `--refiner-height`
-pairs, `--output-width` / `--output-height`, `--num-inference-steps`,
-`--refiner-num-inference-steps` and `--deterministic`. Of these only `--seed`,
-`--samples` and `--output` are reachable through `run_demo.sh`.
+It also takes `--prompt-file`, `--image`, `--seed`, `--config`, `--output-width`
+/ `--output-height`, `--num-inference-steps`, `--refiner-num-inference-steps`
+and `--deterministic`. Of these only `--seed`, `--samples` and `--output` are
+reachable through `run_demo.sh`.
 
 1080p runs `configs/magi2_refiner.json`: the preview stage generates 512x896 and
 the refiner takes that to 1088x1920. `magi2_refiner.json` extends
