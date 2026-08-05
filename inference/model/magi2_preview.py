@@ -150,24 +150,12 @@ def _torch_grouped_linear(
     gather_ids: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     ordered_input = _maybe_gather(input, gather_ids)
-    outputs = []
-    start = 0
-    for expert_idx, split in enumerate(m_splits):
-        end = start + split
-        if end > start:
-            outputs.append(
-                F.linear(
-                    ordered_input[start:end],
-                    weight[expert_idx],
-                    None if bias is None else bias[expert_idx],
-                )
-            )
-        start = end
-    return (
-        torch.cat(outputs, dim=0)
-        if outputs
-        else ordered_input.new_empty((0, weight.size(1)))
-    )
+    chunks = list(torch.split(ordered_input, m_splits, dim=0))
+    outputs = [
+        F.linear(chunk, weight[i], None if bias is None else bias[i])
+        for i, chunk in enumerate(chunks)
+    ]
+    return torch.cat(outputs, dim=0) if outputs else ordered_input.new_empty((0, weight.size(1)))
 
 
 
