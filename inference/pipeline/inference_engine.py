@@ -475,6 +475,9 @@ class Magi2InferenceEngine:
             device=self.device,
         )
 
+        ref_audio_feat = torch.zeros(
+            1, 0, self.audio_latent_dim, dtype=torch.float32, device=self.device
+        )
 
         self.video_scheduler.set_timesteps(
             br_num_inference_steps, device=self.device, shift=self.shift
@@ -490,7 +493,7 @@ class Magi2InferenceEngine:
             audio_latent=audio_latent,
             txt_feat=context,
             null_txt_feat=context_null,
-            ref_audio_feat=None,
+            ref_audio_feat=ref_audio_feat,
             ref_video_feat=None,
             video_scheduler=self.video_scheduler,
             audio_scheduler=self.audio_scheduler,
