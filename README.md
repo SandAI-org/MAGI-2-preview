@@ -21,17 +21,17 @@ pipeline are described in [MAGI-2 Preview: Scaling Video Generation Models
 Efficiently](https://sand.ai/blog/magi-2-preview); the weights are on Hugging
 Face at [sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview).
 
+> [!NOTE]
+> The released weights are the **base model**, with no step distillation: a clip
+> takes 100 preview steps and 5 refiner steps. A **distilled** model that reaches
+> the same result in far fewer steps is coming.
+
 This repository is the inference code. It generates video from a text prompt
 (T2V) or from a prompt plus a still image (I2V), with sound generated alongside
 the video and muxed into the output file. Clips are 10 seconds long, which is
 the only duration the model currently supports. Generation runs in two stages:
 `magi2_preview` denoises the clip at low resolution, and `magi2_refiner` takes
 that result up to 1080p.
-
-What is released here is the base model, with no step distillation applied to
-either transformer. The preview stage takes 100 denoising steps and the refiner
-5, and that step count is where most of the wall-clock time goes. A distilled
-model, which reaches the same result in far fewer steps, is coming.
 
 ## Requirements
 
@@ -72,6 +72,20 @@ pip install -r requirements.txt
 MAGI-2 also needs [MagiAttention](https://github.com/SandAI-org/MagiAttention)
 and [MagiCompiler](https://github.com/SandAI-org/MagiCompiler). The pinned
 revisions are recorded as build args in the [Dockerfile](Dockerfile).
+
+## Model releases
+
+Neither transformer has been step-distilled, so the denoising step count is what
+most of the wall-clock time goes into. That is the difference between the
+release that exists today and the one that follows:
+
+| Release | Denoising steps | Weights |
+| --- | --- | --- |
+| MAGI-2 Preview, base | 100 preview + 5 refiner | [sand-ai/MAGI-2-preview](https://huggingface.co/sand-ai/MAGI-2-preview) |
+| MAGI-2 Preview, distilled | far fewer | Coming soon |
+
+The rest of this README describes the base model, the one this repository runs
+today.
 
 ## Checkpoints
 
