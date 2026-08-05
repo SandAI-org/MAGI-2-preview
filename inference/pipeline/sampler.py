@@ -60,7 +60,7 @@ class Magi2PreviewSampler:
     def sample(
         self, sampler_input: SamplerInput,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        video_cfgs, audio_cfgs = self.precalculate_cfg(
+        video_cfgs, audio_cfgs = self.precompute_cfg(
             sampler_input.video_t_list,
             sampler_input.latent.shape[2],
             sampler_input.cfg_config,
@@ -188,7 +188,7 @@ class Magi2PreviewSampler:
             ref_video_feat_len=ref_video_feat_len,
         )
 
-    def precalculate_cfg(
+    def precompute_cfg(
         self, t_list: list[torch.Tensor], latent_length: int, cfg_config: CFGConfig
     ) -> tuple[list[torch.Tensor], list[float]]:
         all_video_cfgs = []

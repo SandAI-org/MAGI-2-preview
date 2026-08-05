@@ -71,11 +71,11 @@ def _get_activation(activation: Literal["elu", "snake", "none"], channels: int |
 #  Weight-normed convolutions
 # ---------------------------------------------------------------------------
 
-def WNConv1d(*args, **kwargs) -> nn.Module:
+def wn_conv1d(*args, **kwargs) -> nn.Module:
     return weight_norm(nn.Conv1d(*args, **kwargs))
 
 
-def WNConvTranspose1d(*args, **kwargs) -> nn.Module:
+def wn_conv_transpose1d(*args, **kwargs) -> nn.Module:
     return weight_norm(nn.ConvTranspose1d(*args, **kwargs))
 
 
@@ -110,9 +110,9 @@ class ResidualUnit(nn.Module):
         act = "snake" if use_snake else "elu"
         self.layers = nn.Sequential(
             _get_activation(act, channels=out_channels),
-            WNConv1d(in_channels, out_channels, kernel_size=7, dilation=dilation, padding=padding),
+            wn_conv1d(in_channels, out_channels, kernel_size=7, dilation=dilation, padding=padding),
             _get_activation(act, channels=out_channels),
-            WNConv1d(out_channels, out_channels, kernel_size=1),
+            wn_conv1d(out_channels, out_channels, kernel_size=1),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -128,7 +128,7 @@ class EncoderBlock(nn.Module):
             ResidualUnit(in_channels, in_channels, 3, use_snake=use_snake),
             ResidualUnit(in_channels, in_channels, 9, use_snake=use_snake),
             _get_activation(act, channels=in_channels),
-            WNConv1d(in_channels, out_channels, kernel_size=2 * stride, stride=stride,
+            wn_conv1d(in_channels, out_channels, kernel_size=2 * stride, stride=stride,
                      padding=math.ceil(stride / 2)),
         )
 
@@ -144,11 +144,11 @@ class DecoderBlock(nn.Module):
         if use_nearest_upsample:
             upsample = nn.Sequential(
                 nn.Upsample(scale_factor=stride, mode="nearest"),
-                WNConv1d(in_channels, out_channels, kernel_size=2 * stride, stride=1,
+                wn_conv1d(in_channels, out_channels, kernel_size=2 * stride, stride=1,
                          bias=False, padding="same"),
             )
         else:
-            upsample = WNConvTranspose1d(in_channels, out_channels, kernel_size=2 * stride,
+            upsample = wn_conv_transpose1d(in_channels, out_channels, kernel_size=2 * stride,
                                          stride=stride, padding=math.ceil(stride / 2))
         self.layers = nn.Sequential(
             _get_activation(act, channels=in_channels),
@@ -172,14 +172,14 @@ class OobleckEncoder(nn.Module):
                  use_snake: bool = False, **_kwargs):
         super().__init__()
         c_mults = [1] + list(c_mults)
-        layers: list[nn.Module] = [WNConv1d(in_channels, c_mults[0] * channels, kernel_size=7, padding=3)]
+        layers: list[nn.Module] = [wn_conv1d(in_channels, c_mults[0] * channels, kernel_size=7, padding=3)]
         for i in range(len(c_mults) - 1):
             layers.append(EncoderBlock(c_mults[i] * channels, c_mults[i + 1] * channels,
                                        strides[i], use_snake=use_snake))
         act = "snake" if use_snake else "elu"
         layers.extend([
             _get_activation(act, channels=c_mults[-1] * channels),
-            WNConv1d(c_mults[-1] * channels, latent_dim, kernel_size=3, padding=1),
+            wn_conv1d(c_mults[-1] * channels, latent_dim, kernel_size=3, padding=1),
         ])
         self.layers = nn.Sequential(*layers)
 
@@ -194,7 +194,7 @@ class OobleckDecoder(nn.Module):
                  final_tanh: bool = True, **_kwargs):
         super().__init__()
         c_mults = [1] + list(c_mults)
-        layers: list[nn.Module] = [WNConv1d(latent_dim, c_mults[-1] * channels, kernel_size=7, padding=3)]
+        layers: list[nn.Module] = [wn_conv1d(latent_dim, c_mults[-1] * channels, kernel_size=7, padding=3)]
         for i in range(len(c_mults) - 1, 0, -1):
             layers.append(DecoderBlock(c_mults[i] * channels, c_mults[i - 1] * channels,
                                        strides[i - 1], use_snake=use_snake,
@@ -202,7 +202,7 @@ class OobleckDecoder(nn.Module):
         act = "snake" if use_snake else "elu"
         layers.extend([
             _get_activation(act, channels=c_mults[0] * channels),
-            WNConv1d(c_mults[0] * channels, out_channels, kernel_size=7, padding=3, bias=False),
+            wn_conv1d(c_mults[0] * channels, out_channels, kernel_size=7, padding=3, bias=False),
             nn.Tanh() if final_tanh else nn.Identity(),
         ])
         self.layers = nn.Sequential(*layers)

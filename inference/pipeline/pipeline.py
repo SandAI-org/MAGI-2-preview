@@ -91,7 +91,7 @@ class Magi2Pipeline:
 # Evaluator facade
 # -----------------------------------------------------------------------------
 
-"""MAGI-2 Evaluator — wraps Magi2ActEvaluator for standalone offline inference."""
+"""MAGI-2 Evaluator — wraps Magi2InferenceEngine for standalone offline inference."""
 
 from typing import Optional
 
@@ -100,7 +100,7 @@ import numpy as np
 from inference.common.magi2_config import EvaluationConfig
 from inference.infra.distributed import psm
 
-from .act_evaluator import Magi2ActEvaluator
+from .inference_engine import Magi2InferenceEngine
 
 
 class Magi2Evaluator:
@@ -113,7 +113,7 @@ class Magi2Evaluator:
         device: str = "cuda",
         magi2_refiner: Optional[torch.nn.Module] = None,
     ):
-        self.act_evaluator = Magi2ActEvaluator(
+        self.inference_engine = Magi2InferenceEngine(
             model=model,
             config=config,
             device=device,
@@ -147,7 +147,7 @@ class Magi2Evaluator:
         steps = num_inference_steps or self.config.num_inference_steps or 30
         refiner_steps = magi2_refiner_num_inference_steps or self.config.magi2_refiner_num_inference_steps
 
-        video_np, audio_np = self.act_evaluator.evaluate(
+        video_np, audio_np = self.inference_engine.evaluate(
             prompt=prompt,
             image=image_path,
             eval_task_type=eval_task_type,
@@ -171,7 +171,11 @@ class Magi2Evaluator:
             output_fps = float(self.config.fps) * (2 if refiner_width else 1)
             self._save_video(video_np, save_path_prefix, seconds, output_fps=output_fps)
             if audio_np is not None:
-                self._mux_audio(save_path_prefix, audio_np, self.act_evaluator.audio_vae.sample_rate)
+                self._mux_audio(
+                    save_path_prefix,
+                    audio_np,
+                    self.inference_engine.audio_vae.sample_rate,
+                )
             print_rank_0(f"[magi2] Video saved: {save_path_prefix}.mp4")
         else:
             print_rank_0(f"[magi2] Rank {rank}: not leader, skip save")

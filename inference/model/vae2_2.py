@@ -14,6 +14,7 @@
 
 import logging
 import os
+import warnings
 
 import gc
 import torch
@@ -29,7 +30,7 @@ CACHE_T = 2
 
 class CausalConv3d(nn.Conv3d):
     """
-    Causal 3d convolusion.
+    Causal 3D convolution.
     """
 
     def __init__(self, *args, **kwargs):
@@ -56,7 +57,7 @@ class CausalConv3d(nn.Conv3d):
         return x
 
 
-class RMS_norm(nn.Module):
+class RMSNorm(nn.Module):
     def __init__(self, dim, channel_first=True, images=True, bias=False):
         super().__init__()
         broadcastable_dims = (1, 1, 1) if not images else (1, 1)
@@ -222,10 +223,10 @@ class ResidualBlock(nn.Module):
 
         # layers
         self.residual = nn.Sequential(
-            RMS_norm(in_dim, images=False),
+            RMSNorm(in_dim, images=False),
             nn.SiLU(),
             CausalConv3d(in_dim, out_dim, 3, padding=1),
-            RMS_norm(out_dim, images=False),
+            RMSNorm(out_dim, images=False),
             nn.SiLU(),
             nn.Dropout(dropout),
             CausalConv3d(out_dim, out_dim, 3, padding=1),
@@ -277,7 +278,7 @@ class AttentionBlock(nn.Module):
         self.dim = dim
 
         # layers
-        self.norm = RMS_norm(dim)
+        self.norm = RMSNorm(dim)
         self.to_qkv = nn.Conv2d(dim, dim * 3, 1)
         self.proj = nn.Conv2d(dim, dim, 1)
 
@@ -425,9 +426,9 @@ class DupUp3D(nn.Module):
         return x
 
 
-class Down_ResidualBlock(nn.Module):
+class DownResidualBlock(nn.Module):
     def __init__(
-        self, in_dim, out_dim, dropout, mult, temperal_downsample=False, down_flag=False
+        self, in_dim, out_dim, dropout, mult, temporal_downsample=False, down_flag=False
     ):
         super().__init__()
 
@@ -435,7 +436,7 @@ class Down_ResidualBlock(nn.Module):
         self.avg_shortcut = AvgDown3D(
             in_dim,
             out_dim,
-            factor_t=2 if temperal_downsample else 1,
+            factor_t=2 if temporal_downsample else 1,
             factor_s=2 if down_flag else 1,
         )
 
@@ -447,7 +448,7 @@ class Down_ResidualBlock(nn.Module):
 
         # Add the final downsample block
         if down_flag:
-            mode = "downsample3d" if temperal_downsample else "downsample2d"
+            mode = "downsample3d" if temporal_downsample else "downsample2d"
             downsamples.append(Resample(out_dim, mode=mode))
 
         self.downsamples = nn.Sequential(*downsamples)
@@ -461,9 +462,9 @@ class Down_ResidualBlock(nn.Module):
         return x + self.avg_shortcut(x_copy)
 
 
-class Up_ResidualBlock(nn.Module):
+class UpResidualBlock(nn.Module):
     def __init__(
-        self, in_dim, out_dim, dropout, mult, temperal_upsample=False, up_flag=False
+        self, in_dim, out_dim, dropout, mult, temporal_upsample=False, up_flag=False
     ):
         super().__init__()
         # Shortcut path with upsample
@@ -471,7 +472,7 @@ class Up_ResidualBlock(nn.Module):
             self.avg_shortcut = DupUp3D(
                 in_dim,
                 out_dim,
-                factor_t=2 if temperal_upsample else 1,
+                factor_t=2 if temporal_upsample else 1,
                 factor_s=2 if up_flag else 1,
             )
         else:
@@ -485,7 +486,7 @@ class Up_ResidualBlock(nn.Module):
 
         # Add the final upsample block
         if up_flag:
-            mode = "upsample3d" if temperal_upsample else "upsample2d"
+            mode = "upsample3d" if temporal_upsample else "upsample2d"
             upsamples.append(Resample(out_dim, mode=mode))
 
         self.upsamples = nn.Sequential(*upsamples)
@@ -516,7 +517,7 @@ class Encoder3d(nn.Module):
         dim_mult=[1, 2, 4, 4],
         num_res_blocks=2,
         attn_scales=[],
-        temperal_downsample=[True, True, False],
+        temporal_downsample=[True, True, False],
         dropout=0.0,
     ):
         super().__init__()
@@ -525,7 +526,7 @@ class Encoder3d(nn.Module):
         self.dim_mult = dim_mult
         self.num_res_blocks = num_res_blocks
         self.attn_scales = attn_scales
-        self.temperal_downsample = temperal_downsample
+        self.temporal_downsample = temporal_downsample
 
         # dimensions
         dims = [dim * u for u in [1] + dim_mult]
@@ -538,15 +539,15 @@ class Encoder3d(nn.Module):
         downsamples = []
         for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
             t_down_flag = (
-                temperal_downsample[i] if i < len(temperal_downsample) else False
+                temporal_downsample[i] if i < len(temporal_downsample) else False
             )
             downsamples.append(
-                Down_ResidualBlock(
+                DownResidualBlock(
                     in_dim=in_dim,
                     out_dim=out_dim,
                     dropout=dropout,
                     mult=num_res_blocks,
-                    temperal_downsample=t_down_flag,
+                    temporal_downsample=t_down_flag,
                     down_flag=i != len(dim_mult) - 1,
                 )
             )
@@ -562,7 +563,7 @@ class Encoder3d(nn.Module):
 
         # # output blocks
         self.head = nn.Sequential(
-            RMS_norm(out_dim, images=False),
+            RMSNorm(out_dim, images=False),
             nn.SiLU(),
             CausalConv3d(out_dim, z_dim, 3, padding=1),
         )
@@ -632,7 +633,7 @@ class Decoder3d(nn.Module):
         dim_mult=[1, 2, 4, 4],
         num_res_blocks=2,
         attn_scales=[],
-        temperal_upsample=[False, True, True],
+        temporal_upsample=[False, True, True],
         dropout=0.0,
     ):
         super().__init__()
@@ -641,7 +642,7 @@ class Decoder3d(nn.Module):
         self.dim_mult = dim_mult
         self.num_res_blocks = num_res_blocks
         self.attn_scales = attn_scales
-        self.temperal_upsample = temperal_upsample
+        self.temporal_upsample = temporal_upsample
 
         # dimensions
         dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]
@@ -659,14 +660,14 @@ class Decoder3d(nn.Module):
         # upsample blocks
         upsamples = []
         for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
-            t_up_flag = temperal_upsample[i] if i < len(temperal_upsample) else False
+            t_up_flag = temporal_upsample[i] if i < len(temporal_upsample) else False
             upsamples.append(
-                Up_ResidualBlock(
+                UpResidualBlock(
                     in_dim=in_dim,
                     out_dim=out_dim,
                     dropout=dropout,
                     mult=num_res_blocks + 1,
-                    temperal_upsample=t_up_flag,
+                    temporal_upsample=t_up_flag,
                     up_flag=i != len(dim_mult) - 1,
                 )
             )
@@ -674,7 +675,7 @@ class Decoder3d(nn.Module):
 
         # output blocks
         self.head = nn.Sequential(
-            RMS_norm(out_dim, images=False),
+            RMSNorm(out_dim, images=False),
             nn.SiLU(),
             CausalConv3d(out_dim, 12, 3, padding=1),
         )
@@ -756,7 +757,7 @@ class WanVAE_(nn.Module):
         dim_mult=[1, 2, 4, 4],
         num_res_blocks=2,
         attn_scales=[],
-        temperal_downsample=[True, True, False],
+        temporal_downsample=[True, True, False],
         dropout=0.0,
     ):
         super().__init__()
@@ -765,8 +766,8 @@ class WanVAE_(nn.Module):
         self.dim_mult = dim_mult
         self.num_res_blocks = num_res_blocks
         self.attn_scales = attn_scales
-        self.temperal_downsample = temperal_downsample
-        self.temperal_upsample = temperal_downsample[::-1]
+        self.temporal_downsample = temporal_downsample
+        self.temporal_upsample = temporal_downsample[::-1]
 
         # modules
         self.encoder = Encoder3d(
@@ -775,7 +776,7 @@ class WanVAE_(nn.Module):
             dim_mult,
             num_res_blocks,
             attn_scales,
-            self.temperal_downsample,
+            self.temporal_downsample,
             dropout,
         )
         self.conv1 = CausalConv3d(z_dim * 2, z_dim * 2, 1)
@@ -786,7 +787,7 @@ class WanVAE_(nn.Module):
             dim_mult,
             num_res_blocks,
             attn_scales,
-            self.temperal_upsample,
+            self.temporal_upsample,
             dropout,
         )
 
@@ -855,7 +856,7 @@ def _video_vae(pretrained_path=None, z_dim=16, dim=160, device="cpu", **kwargs):
         dim_mult=[1, 2, 4, 4],
         num_res_blocks=2,
         attn_scales=[],
-        temperal_downsample=[True, True, True],
+        temporal_downsample=[True, True, True],
         dropout=0.0,
     )
     cfg.update(**kwargs)
@@ -878,10 +879,21 @@ class Wan2_2_VAE:
         c_dim=160,
         vae_pth=None,
         dim_mult=[1, 2, 4, 4],
-        temperal_downsample=[False, True, True],
+        temporal_downsample=[False, True, True],
         dtype=torch.float,
         device="cuda",
+        **legacy_kwargs,
     ):
+        if "temperal_downsample" in legacy_kwargs:
+            warnings.warn(
+                "temperal_downsample is deprecated; use temporal_downsample instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            temporal_downsample = legacy_kwargs.pop("temperal_downsample")
+        if legacy_kwargs:
+            unexpected = next(iter(legacy_kwargs))
+            raise TypeError(f"unexpected keyword argument {unexpected!r}")
         self.dtype = dtype
         self.device = device
 
@@ -1002,7 +1014,7 @@ class Wan2_2_VAE:
                 z_dim=z_dim,
                 dim=c_dim,
                 dim_mult=dim_mult,
-                temperal_downsample=temperal_downsample,
+                temporal_downsample=temporal_downsample,
             )
             .eval()
             .requires_grad_(False)
