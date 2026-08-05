@@ -244,8 +244,8 @@ class EvaluationConfig(BaseModel):
     data_proxy_config: DataProxyConfig = Field(default_factory=DataProxyConfig)
     fps: Union[int, float] = 12.5
     shift: float = 5.0
-    vae_model_path: str = "${MAGI2_CKPT_ROOT}/Wan2.2-TI2V-5B"
-    txt_model_path: str = "${MAGI2_CKPT_ROOT}/Qwen3.5-27B"
+    vae_model_path: str = "${MAGI2_CKPT_ROOT}/vae"
+    txt_model_path: str = "${MAGI2_CKPT_ROOT}/text_encoder"
     audio_model_path: str = Field(default="${MAGI2_CKPT_ROOT}/stable-audio-open-1.0", validate_default=True)
     vae_stride: Tuple[int, int, int] = (8, 16, 16)
     patch_size: Tuple[int, int, int] = (1, 1, 1)
@@ -299,13 +299,13 @@ class EvaluationConfig(BaseModel):
     student_config: str = (
         "${MAGI2_CKPT_ROOT}/turbo_vae/TurboV3-Wan22-TinyShallow_7_7.json"
     )
-    student_ckpt: str = "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint-340000.ckpt"
+    student_ckpt: str = "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint.ckpt"
     num_inference_steps: int = 30
     magi2_refiner_num_inference_steps: int = 5
 
     use_magi2_refiner: bool = False
     magi2_refiner_model_name: Literal["magi2_refiner"] = "magi2_refiner"
-    magi2_refiner_model_path: str = "${MAGI2_CKPT_ROOT}/magi2_refiner"
+    magi2_refiner_model_path: str = "${MAGI2_CKPT_ROOT}/refiner"
     magi2_refiner_video_txt_guidance_scale: float = 2.0
     magi2_refiner_audio_txt_guidance_scale: float = 5.0
     magi2_refiner_noise_value: int = 220
