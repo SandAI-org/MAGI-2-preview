@@ -60,7 +60,7 @@ class Magi2PreviewSampler:
     def sample(
         self, sampler_input: SamplerInput,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        video_cfgs, audio_cfgs = self.precompute_cfg(
+        video_cfgs, audio_cfgs = self.precalculate_cfg(
             sampler_input.video_t_list,
             sampler_input.latent.shape[2],
             sampler_input.cfg_config,
@@ -75,9 +75,6 @@ class Magi2PreviewSampler:
             disable=psm.get_global_rank() != 0,
         )
         for t, video_cfg, audio_cfg in progress:
-            if sampler_input.first_frame_feat is not None:
-                latent[:, :, :1] = sampler_input.first_frame_feat[:, :, :1]
-
             model_input = self.prepare_model_input(
                 latent=latent,
                 audio_latent=audio_latent,
@@ -85,8 +82,11 @@ class Magi2PreviewSampler:
                 null_txt_feat=sampler_input.null_txt_feat,
                 ref_audio_feat=sampler_input.ref_audio_feat,
                 ref_video_feat=sampler_input.ref_video_feat,
+                ref_image_feat=sampler_input.ref_image_feat,
+                ref_image_feat_len=sampler_input.ref_image_feat_len,
+                ref_image_special_token_embedding=sampler_input.ref_image_special_token_embedding,
                 t=t,
-                has_first_frame=sampler_input.first_frame_feat is not None,
+                cfg_config=sampler_input.cfg_config,
             )
             model_pred = self.forward(model_input)
 
@@ -102,10 +102,6 @@ class Magi2PreviewSampler:
                 cfg_config=sampler_input.cfg_config,
             )
 
-            if sampler_input.first_frame_feat is not None:
-                latent[:, :, :1] = sampler_input.first_frame_feat[:, :, :1]
-
-
         return latent, audio_latent
 
     def prepare_model_input(
@@ -116,8 +112,11 @@ class Magi2PreviewSampler:
         null_txt_feat: torch.Tensor,
         ref_audio_feat: Optional[torch.Tensor] = None,
         ref_video_feat: Optional[torch.Tensor] = None,
+        ref_image_feat: Optional[torch.Tensor] = None,
+        ref_image_feat_len: Optional[torch.Tensor] = None,
+        ref_image_special_token_embedding: Optional[torch.Tensor] = None,
         t: torch.Tensor | None = None,
-        has_first_frame: bool = False,
+        cfg_config: Optional[CFGConfig] = None,
     ) -> ModelInput:
         audio_latent_len = audio_latent.shape[1]
         ref_audio_feat_len = ref_audio_feat.shape[1]
@@ -142,6 +141,17 @@ class Magi2PreviewSampler:
             [ref_video_feat_len, ref_video_feat_len], device=latent.device
         )
 
+        (
+            ref_image_feat_cfg,
+            ref_image_feat_len_cfg,
+            ref_image_special_tokens_cfg,
+        ) = self._prepare_ref_image_cfg(
+            ref_image_feat,
+            ref_image_feat_len,
+            ref_image_special_token_embedding,
+            cfg_config,
+        )
+
         if t is None:
             t_value = torch.tensor(0.0, device=latent.device, dtype=latent.dtype)
         elif isinstance(t, torch.Tensor):
@@ -159,8 +169,6 @@ class Magi2PreviewSampler:
             .expand(batch_cfg, 1, video_t, video_h, video_w)
             .clone()
         )
-        if has_first_frame:
-            per_token_video_t[:, :, 0, :, :] = 0.0
         per_token_audio_t = (
             t_normalized.view(-1, 1, 1).expand(batch_cfg, audio_t, 1).clone()
         )
@@ -186,9 +194,48 @@ class Magi2PreviewSampler:
             ),
             ref_video_feat=ref_video_feat,
             ref_video_feat_len=ref_video_feat_len,
+            ref_image_feat=ref_image_feat_cfg,
+            ref_image_feat_len=ref_image_feat_len_cfg,
+            ref_image_special_token_embedding=ref_image_special_tokens_cfg,
         )
 
-    def precompute_cfg(
+    @staticmethod
+    def _prepare_ref_image_cfg(
+        ref_image_feat: Optional[torch.Tensor],
+        ref_image_feat_len: Optional[torch.Tensor],
+        ref_image_special_token_embedding: Optional[torch.Tensor],
+        cfg_config: Optional[CFGConfig],
+    ) -> tuple[
+        Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]
+    ]:
+        """Duplicate the image conditioning along the cond/uncond batch axis.
+
+        By default the unconditional half sees a zeroed image so CFG steers both
+        the text and the image. With ``use_ref_for_uncond`` the image is kept on
+        both halves, which leaves CFG steering the text alone.
+        """
+        if ref_image_feat is None:
+            return None, None, None
+
+        keep_ref = bool(cfg_config is not None and cfg_config.use_ref_for_uncond)
+        uncond_feat = ref_image_feat if keep_ref else torch.zeros_like(ref_image_feat)
+        ref_image_feat_cfg = torch.cat([ref_image_feat, uncond_feat], dim=0)
+        ref_image_feat_len_cfg = (
+            torch.cat([ref_image_feat_len, ref_image_feat_len], dim=0)
+            if ref_image_feat_len is not None
+            else None
+        )
+        ref_image_special_tokens_cfg = (
+            torch.cat(
+                [ref_image_special_token_embedding, ref_image_special_token_embedding],
+                dim=0,
+            )
+            if ref_image_special_token_embedding is not None
+            else None
+        )
+        return ref_image_feat_cfg, ref_image_feat_len_cfg, ref_image_special_tokens_cfg
+
+    def precalculate_cfg(
         self, t_list: list[torch.Tensor], latent_length: int, cfg_config: CFGConfig
     ) -> tuple[list[torch.Tensor], list[float]]:
         all_video_cfgs = []

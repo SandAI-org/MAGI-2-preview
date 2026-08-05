@@ -1,5 +1,5 @@
 [
-  {"prompt_file": "assets/sample_000.txt", "image": "assets/sample_000.png"},
+  {"prompt_file": "assets/sample_000.txt", "image": "assets/sample_000.jpeg"},
   {"prompt_file": "assets/sample_001.txt", "image": "assets/sample_001.png"},
   {"prompt_file": "assets/sample_002.txt", "image": "assets/sample_002.png"},
   {"prompt_file": "assets/sample_000.txt"},
