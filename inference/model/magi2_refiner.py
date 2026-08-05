@@ -1952,7 +1952,7 @@ class Adapter(torch.nn.Module):
         return output_x, rope
 
 
-class TransFormerLayer(torch.nn.Module):
+class TransformerLayer(torch.nn.Module):
     """
     A single transformer layer with attention, MLP, and adaptive layer normalization
     """
@@ -2076,9 +2076,9 @@ class TransformerBlock(torch.nn.Module):
     def __init__(self, model_config: ModelConfig):
         super().__init__()
         # Build all transformer layers
-        self.layers: list[TransFormerLayer] = nn.ModuleList()
+        self.layers: list[TransformerLayer] = nn.ModuleList()
         for layer_idx in range(model_config.num_layers):
-            self.layers.append(TransFormerLayer(model_config, layer_idx))
+            self.layers.append(TransformerLayer(model_config, layer_idx))
 
     def forward(
         self,

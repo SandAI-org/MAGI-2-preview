@@ -40,7 +40,7 @@ def get_activation(act_fn: str) -> nn.Module:
         return ACT2CLS[act_fn]()
     else:
         raise ValueError(
-            f"activation function {act_fn} not found in ACT2FN mapping {list(ACT2CLS.keys())}"
+            f"activation function {act_fn} not found in ACT2CLS mapping {list(ACT2CLS.keys())}"
         )
 
 
@@ -223,7 +223,7 @@ class TurboVAEDCausalConv3d(nn.Module):
         return hidden_states
 
 
-class TurboVAEDCausalDepthwiseSeperableConv3d(nn.Module):
+class TurboVAEDCausalDepthwiseSeparableConv3d(nn.Module):
     def __init__(
         self,
         in_channels: int,
@@ -285,7 +285,7 @@ class TurboVAEDCausalDepthwiseSeperableConv3d(nn.Module):
         return hidden_states
 
 
-class TurboVAEDResnetBlock3d(nn.Module):
+class TurboVAEDResNetBlock3d(nn.Module):
     r"""
     A 3D ResNet block used in the TurboVAED model.
 
@@ -297,7 +297,7 @@ class TurboVAEDResnetBlock3d(nn.Module):
         eps (`float`, defaults to `1e-6`):
             Epsilon value for normalization layers.
         elementwise_affine (`bool`, defaults to `False`):
-            Whether to enable elementwise affinity in the normalization layers.
+            Whether to enable elementwise affine parameters in the normalization layers.
         non_linearity (`str`, defaults to `"swish"`):
             Activation function to use.
         conv_shortcut (bool, defaults to `False`):
@@ -325,7 +325,7 @@ class TurboVAEDResnetBlock3d(nn.Module):
         self.conv_operation = (
             TurboVAEDCausalConv3d
             if not is_dw_conv
-            else TurboVAEDCausalDepthwiseSeperableConv3d
+            else TurboVAEDCausalDepthwiseSeparableConv3d
         )
         self.kernel_size = 3 if not is_dw_conv else dw_kernel_size
 
@@ -496,7 +496,7 @@ class TurboVAEDMidBlock3d(nn.Module):
         resnets = []
         for _ in range(num_layers):
             resnets.append(
-                TurboVAEDResnetBlock3d(
+                TurboVAEDResNetBlock3d(
                     in_channels=in_channels,
                     out_channels=in_channels,
                     eps=resnet_eps,
@@ -560,7 +560,7 @@ class TurboVAEDUpBlock3d(nn.Module):
 
         self.conv_in = None
         if in_channels != out_channels:
-            self.conv_in = TurboVAEDResnetBlock3d(
+            self.conv_in = TurboVAEDResNetBlock3d(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 eps=resnet_eps,
@@ -585,7 +585,7 @@ class TurboVAEDUpBlock3d(nn.Module):
         resnets = []
         for _ in range(num_layers):
             resnets.append(
-                TurboVAEDResnetBlock3d(
+                TurboVAEDResNetBlock3d(
                     in_channels=out_channels,
                     out_channels=out_channels,
                     eps=resnet_eps,

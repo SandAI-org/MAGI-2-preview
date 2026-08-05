@@ -2917,7 +2917,7 @@ class PostAdapter(nn.Module):
         return x_out
 
 
-class TransFormerLayer(nn.Module):
+class TransformerLayer(nn.Module):
     def __init__(self, model_config: ModelConfig, layer_idx: int) -> None:
         super().__init__()
         num_modality = 3 if layer_idx in model_config.mm_layers else 1
@@ -3129,7 +3129,7 @@ class TransformerBlock(nn.Module):
     def __init__(self, model_config: ModelConfig) -> None:
         super().__init__()
         self.layers = nn.ModuleList(
-            [TransFormerLayer(model_config, i) for i in range(model_config.num_layers)]
+            [TransformerLayer(model_config, i) for i in range(model_config.num_layers)]
         )
 
     def forward(
@@ -3169,7 +3169,7 @@ def _initialize_magi2_skip_load_weights(module: nn.Module) -> None:
                 submodule.W_down.zero_()
                 submodule.router.expert_bias.zero_()
                 submodule.router.expert_bias_ema.zero_()
-            elif isinstance(submodule, TransFormerLayer):
+            elif isinstance(submodule, TransformerLayer):
                 for param_name, parameter in submodule.named_parameters(recurse=False):
                     if param_name.startswith(("mhc_bias_", "mhc_phi_fused_")):
                         parameter.zero_()

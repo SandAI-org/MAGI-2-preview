@@ -64,7 +64,7 @@ class EvalInput:
 EvalTaskType = Literal["image2video", "text2video"]
 
 
-def resizecrop(image: Image.Image, th: int, tw: int):
+def resize_crop(image: Image.Image, th: int, tw: int):
     w, h = image.size
     if w == tw and h == th:
         return image
@@ -81,7 +81,7 @@ def resizecrop(image: Image.Image, th: int, tw: int):
     return image.crop((left, top, right, bottom))
 
 
-class Magi2ActEvaluator:
+class Magi2InferenceEngine:
     def __init__(
         self,
         model: torch.nn.Module,
@@ -185,9 +185,11 @@ class Magi2ActEvaluator:
                 hasattr(config, "magi2_refiner_data_proxy_config")
                 and config.magi2_refiner_data_proxy_config is not None
             ):
-                from .refiner_data_proxy import MMActDataProxy
+                from .refiner_data_proxy import Magi2RefinerDataProxy
 
-                self.magi2_refiner_data_proxy = MMActDataProxy(config.magi2_refiner_data_proxy_config)
+                self.magi2_refiner_data_proxy = Magi2RefinerDataProxy(
+                    config.magi2_refiner_data_proxy_config
+                )
             self.magi2_refiner_sigmas = ZeroSNRDDPMDiscretization()(
                 1000, do_append_zero=False, flip=True
             )
@@ -221,7 +223,7 @@ class Magi2ActEvaluator:
     ) -> torch.Tensor:
         if self.image_broadcaster.is_src_rank:
             image = load_image(image)
-            image = resizecrop(image, height, width)
+            image = resize_crop(image, height, width)
             image = self.video_processor.preprocess(image, height=height, width=width)
             image = image.to(device=self.device, dtype=self.dtype).unsqueeze(2)
             image = image[:, :3]
