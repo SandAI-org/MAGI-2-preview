@@ -12,12 +12,11 @@ This repository is the inference code. It generates video from a text prompt
 the video and muxed into the output file. Clips are 10 seconds long, which is
 the only duration the model currently supports. Generation runs in two stages:
 `magi2_preview` denoises the clip at low resolution, and `magi2_refiner` takes
-that result up to 1080p. The refiner is optional; the preview stage alone
-produces 272p or 540p video.
+that result up to 1080p.
 
 ## Requirements
 
-- NVIDIA Hopper GPUs. The 1080p preset expects 8 of them.
+- NVIDIA Hopper GPUs, 8 of them.
 - Python 3.12 and a recent CUDA toolkit.
 - `ffmpeg` on `PATH`, to mux the audio track. Without it the video is still
   written, just silently.
@@ -106,19 +105,18 @@ both, so enhancing is not a precondition for generating.
 
 ## Running inference
 
-`scripts/run_demo.sh` picks a config and resolution preset, then launches
-`inference/pipeline/entry.py` under `torchrun` on every visible GPU. It defaults
-to 1080p, seed 42, and the batch in `assets/demo_samples.json`:
+`scripts/run_demo.sh` launches `inference/pipeline/entry.py` under `torchrun` on
+every visible GPU. It generates at 1080p, with seed 42 and the batch in
+`assets/demo_samples.json`:
 
 ```bash
-bash scripts/run_demo.sh                           # 1080p
-RESOLUTION=540p bash scripts/run_demo.sh           # preview only, no refiner
+bash scripts/run_demo.sh
 SAMPLES=my_samples.json bash scripts/run_demo.sh   # a different batch
 OUTPUT_DIR=output/run7 bash scripts/run_demo.sh
 ```
 
-The script reads `RESOLUTION`, `SAMPLES`, `OUTPUT_DIR`, `SEED` and `MASTER_PORT`,
-and nothing else. Videos land in `$OUTPUT_DIR/sample_000.mp4` and up, numbered by
+The script takes `SAMPLES`, `OUTPUT_DIR`, `SEED` and `MASTER_PORT` from the
+environment. Videos land in `$OUTPUT_DIR/sample_000.mp4` and up, numbered by
 position in the batch.
 
 A samples file is a JSON array with one entry per video. An entry carries its
@@ -131,34 +129,24 @@ For a single clip, call the entry point directly:
 
 ```bash
 torchrun --nproc_per_node=8 inference/pipeline/entry.py \
-    --resolution 540p --prompt "a red fox in snow" --output output/
+    --prompt "a red fox in snow" --output output/
 ```
 
-It also takes `--prompt-file`, `--image`, `--seed`, `--config`, the
-`--preview-width` / `--preview-height` and `--refiner-width` / `--refiner-height`
-pairs, `--output-width` / `--output-height`, `--num-inference-steps`,
-`--refiner-num-inference-steps` and `--deterministic`. Of these only
-`--resolution`, `--seed`, `--samples` and `--output` are reachable through
-`run_demo.sh`.
+It also takes `--prompt-file`, `--image`, `--seed`, `--config`, `--output-width`
+/ `--output-height`, `--num-inference-steps`, `--refiner-num-inference-steps`
+and `--deterministic`. Of these only `--seed`, `--samples` and `--output` are
+reachable through `run_demo.sh`.
 
-The resolution presets are:
+1080p runs `configs/magi2_refiner.json`: the preview stage generates 512x896 and
+the refiner takes that to 1088x1920. `magi2_refiner.json` extends
+`magi2_preview.json` and carries only what the refiner stage adds, so a shared
+setting is edited in one place.
 
-| `RESOLUTION` | Config | Preview | Refiner |
-| --- | --- | --- | --- |
-| `272p` | `configs/magi2_preview.json` | 256x448 | off |
-| `540p` | `configs/magi2_preview.json` | 512x896 | off |
-| `1080p` | `configs/magi2_refiner.json` | 512x896 | 1088x1920 |
-
-`magi2_refiner.json` extends `magi2_preview.json` and carries only what the
-refiner stage adds, so a shared setting is edited in one place.
-
-A preset name is a delivery tier, not the shape that gets generated. The VAE
-stride constrains every generated dimension to a multiple of 16, so the shape
-lands near the tier rather than on it: the `272p` tier generates 448 tall and
-`1080p` generates 1088 wide. Videos are written at that generated shape. Pass
-`--output-width` and `--output-height` to have the finished video rescaled to an
-exact size, the way the reference delivers its tiers: 270x480, 540x960 or
-1080x1920.
+1080p is a delivery tier, not the shape that gets generated. The VAE stride
+constrains every generated dimension to a multiple of 16, so the tier generates
+1088 wide rather than 1080, and the video is written at that generated shape.
+Pass `--output-width` and `--output-height` to have the finished video rescaled
+to an exact size, 1080x1920 the way the reference delivers the tier.
 
 Four environment variables decide where each large component sits between
 phases: `MAGI2_TEXT_ENC_OFFLOAD_MODE`, `MAGI2_PREVIEW_OFFLOAD_MODE`,
