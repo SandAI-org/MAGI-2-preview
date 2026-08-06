@@ -133,6 +133,15 @@ def _enable_deterministic(seed: int):
     # Implies cudnn.deterministic=True; no separate cudnn settings needed.
     # https://docs.pytorch.org/docs/stable/notes/randomness.html
     torch.use_deterministic_algorithms(True)
+    # PyTorch 2.9: use_deterministic_algorithms does NOT propagate to Inductor
+    # compile-time autotuning. Manually disable configs that cause run-to-run
+    # non-determinism under parallel GPU load.
+    import torch._inductor.config as _ic
+    _ic.dynamic_scale_rblock = False
+    _ic.shape_padding = False
+    _ic.comprehensive_padding = False
+    _ic.benchmark_epilogue_fusion = False
+    _ic.coordinate_descent_tuning = False
     # Deterministic env for vendored Triton MoE kernel is MAGI2_DETERMINISTIC (set above)
     print_rank_0(f"[magi2] deterministic mode enabled, seed={seed}")
 
