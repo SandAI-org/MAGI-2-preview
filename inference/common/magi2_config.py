@@ -303,7 +303,7 @@ class EvaluationConfig(BaseModel):
         "${MAGI2_CKPT_ROOT}/turbo_vae/TurboV3-Wan22-TinyShallow_7_7.json"
     )
     student_ckpt: str = "${MAGI2_CKPT_ROOT}/turbo_vae/checkpoint.ckpt"
-    num_inference_steps: int = 30
+    num_inference_steps: int = 100
     magi2_refiner_num_inference_steps: int = 5
 
     use_magi2_refiner: bool = False

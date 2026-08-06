@@ -33,7 +33,6 @@ from inference.utils import print_mem_info_rank_0, print_rank_0
 from inference.pipeline.audio_decoder import SAAudioFeatureExtractor, resample_audio_sinc
 
 
-
 from .preview_data_proxy import Magi2DataProxy
 from .sampler import Magi2PreviewSampler, FlowUniPCMultistepScheduler
 from .preview_data_proxy import CFGConfig, SamplerInput
@@ -76,10 +75,6 @@ class EvalInput:
     ref_audio_feat_len: torch.Tensor
     ref_video_feat: "Optional[torch.Tensor]" = None
     ref_video_feat_len: "Optional[torch.Tensor]" = None
-
-
-
-EvalTaskType = Literal["image2video", "text2video"]
 
 
 def resizepad(image: Image.Image, th: int, tw: int) -> Image.Image:
@@ -402,7 +397,6 @@ class Magi2InferenceEngine:
         self,
         prompt: str,
         image: Optional[str | Image.Image],
-        eval_task_type: EvalTaskType,
         seconds: float,
         preview_width: int,
         preview_height: int,
@@ -424,8 +418,6 @@ class Magi2InferenceEngine:
         width = self.latent_width * self.vae_stride[2]
 
         video_latent_length, audio_latent_length = self._resolve_lengths(seconds)
-        if eval_task_type == "text2video":
-            image = None
 
         (
             ref_image_feat,
