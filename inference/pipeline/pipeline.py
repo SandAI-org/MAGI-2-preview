@@ -21,6 +21,7 @@ from typing import Optional
 import torch
 
 from inference.common.magi2_config import Magi2Config
+from inference.prompt_enhancement import enhance_prompt
 from inference.utils import print_rank_0
 
 
@@ -140,17 +141,22 @@ class Magi2Evaluator:
         magi2_refiner_num_inference_steps: Optional[int] = None,
     ):
         """Run full inference: text encode -> denoise -> VAE decode -> save."""
-        eval_task_type = "text2video"
-        if image_path is not None:
-            eval_task_type = "image2video"
-
-        steps = num_inference_steps or self.config.num_inference_steps or 30
+        steps = num_inference_steps or self.config.num_inference_steps
         refiner_steps = magi2_refiner_num_inference_steps or self.config.magi2_refiner_num_inference_steps
+
+        # PE hits an external LLM; run once on rank 0 and share the result.
+        rank = psm.get_global_rank() if psm.is_initialized() else int(os.environ.get("RANK", "0"))
+        if rank == 0:
+            prompt = enhance_prompt(prompt, image_path)
+            print_rank_0(f"[magi2] PE done, prompt chars={len(prompt)}")
+        if torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1:
+            obj = [prompt]
+            torch.distributed.broadcast_object_list(obj, src=0)
+            prompt = obj[0]
 
         video_np, audio_np = self.inference_engine.evaluate(
             prompt=prompt,
             image=image_path,
-            eval_task_type=eval_task_type,
             seconds=seconds,
             preview_width=preview_width,
             preview_height=preview_height,
@@ -160,11 +166,6 @@ class Magi2Evaluator:
             magi2_refiner_num_inference_steps=refiner_steps if refiner_width else None,
         )
 
-        rank = (
-            psm.get_global_rank()
-            if psm.is_initialized()
-            else int(os.environ.get("RANK", "0"))
-        )
         if video_np is not None:
             if output_width is not None and output_height is not None:
                 video_np = self._resize_video(video_np, output_width, output_height)

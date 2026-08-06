@@ -124,23 +124,28 @@ weights somewhere else, point it at them rather than editing the configs:
 export MAGI2_CKPT_ROOT=/data/magi2-weights
 ```
 
-## Prompts
+## Prompt enhancement
 
-The captions the model was trained on are long and structured, so a prompt
-written by hand underuses it. Two system prompts for a prompt-enhancement LLM
-are included: [`prompts/t2v.md`](prompts/t2v.md) for text to video, and
-[`prompts/i2v.md`](prompts/i2v.md) for a prompt plus a still image.
+The captions the model was trained on are long and structured, so a short hand-
+written prompt underuses it. The pipeline can optionally rewrite the input
+through a prompt-enhancement (PE) step before encoding:
 
-Use one as the system prompt of an instruction-following model, pass the raw
-prompt as the message (the still as well, for I2V), and feed the JSON caption it
-returns to the pipeline in place of the prompt. Both lay out the 10 seconds the
-model generates.
+- text-to-video uses [`inference/prompt_enhancement/prompts/t2v.md`](inference/prompt_enhancement/prompts/t2v.md)
+- image-to-video (when a first-frame image is provided) uses
+  [`inference/prompt_enhancement/prompts/i2v.md`](inference/prompt_enhancement/prompts/i2v.md)
 
-[`assets/`](assets) has both ends of that step. `sample_000.txt` through
-`sample_002.txt` are raw prompts, the kind you would hand to the enhancer;
-[`sample_enhanced_t2v.json`](assets/sample_enhanced_t2v.json) is the shape one
-comes back in. The demo batch runs both, so enhancing is not a precondition for
-generating.
+Both templates ask an instruction-following LLM for a structured JSON caption of
+the 10-second clip; the result is then rendered to readable Markdown and passed
+downstream. The reference client in
+[`inference/prompt_enhancement/`](inference/prompt_enhancement/) talks to an
+OpenAI-compatible endpoint — set `API_KEY` in
+[`enhancer.py`](inference/prompt_enhancement/enhancer.py) to enable it, or
+subclass `LLMClient` for your own provider. Leave `API_KEY` empty to skip PE and
+use the raw prompt as-is.
+
+[`assets/`](assets) ships example prompts that are already PE-enhanced
+(`sample_000.txt` and `sample_002.txt`). You can still generate without running
+PE — leave `API_KEY` empty and pass any prompt you like.
 
 ## Running inference
 

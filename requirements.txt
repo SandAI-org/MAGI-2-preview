@@ -5,6 +5,7 @@ einops>=0.8.0
 ffmpeg-python==0.2.0
 imageio[ffmpeg]==2.37.3
 numpy>=1.26.0
+openai>=2.0.0
 packaging>=24.2
 pandas==3.0.3
 Pillow>=10.0.0
