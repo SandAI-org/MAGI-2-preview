@@ -13,7 +13,7 @@
 
 # MAGI-2 Preview
 
-Magi-2 Preview is a 114B-parameter unified audio-video generation model that
+MAGI-2 Preview is a 114B-parameter unified audio-video generation model that
 activates just 6B parameters per token. Built on MagiMoE and co-designed across
 architecture, systems, and data, it explores an efficient path to scaling video
 generation. The architecture, the training system built around it, and the data
