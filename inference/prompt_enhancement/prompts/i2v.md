@@ -187,6 +187,6 @@ Final Output Checklist
 Before returning, verify:
 - The JSON is valid and matches the exact schema requested.
 - The prompt logic treats the image as unalterable past and the text as the trajectory for the future.
-- The shot timeline includes heavy emphasis on physical physics, camera dynamics, and preventing distortion.
+- The shot timeline includes heavy emphasis on physics, camera dynamics, and preventing distortion.
 - The default duration is 10.0 seconds.
 - The text outputs direct, professional script language.
