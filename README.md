@@ -143,6 +143,17 @@ OpenAI-compatible endpoint — set `API_KEY` in
 subclass `LLMClient` for your own provider. Leave `API_KEY` empty to skip PE and
 use the raw prompt as-is.
 
+The client is configured through environment variables: `MAGI2_PE_API_KEY`,
+`MAGI2_PE_BASE_URL` and `MAGI2_PE_MODEL` select the endpoint (any OpenAI-compatible
+server, e.g. vLLM); `MAGI2_PE_MAX_TOKENS` (default 16384) and `MAGI2_PE_RETRIES`
+(default 3) govern truncated or invalid JSON; `MAGI2_PE_THINKING=1` keeps a reasoning
+model's thinking phase on (off by default, since it can consume the whole token budget
+and return an empty caption); `MAGI2_PE_CACHE=<dir>` reuses the enhanced caption of a
+(prompt, image) pair across runs, which same-seed comparisons need because the LLM
+samples a different caption each call; and `MAGI2_PE_PREFETCH=0` disables the
+background worker that enhances the next samples of a batch while the current clip
+renders.
+
 [`assets/`](assets) ships example prompts that are already PE-enhanced
 (`sample_000.txt` and `sample_002.txt`). You can still generate without running
 PE — leave `API_KEY` empty and pass any prompt you like.

@@ -168,6 +168,11 @@ def main():
     samples = _load_samples(args.samples) if args.samples else _resolve_prompts(args)
     os.makedirs(args.output, exist_ok=True)
 
+    if int(os.environ.get("RANK", "0")) == 0 and len(samples) > 1:
+        from inference.prompt_enhancement.enhancer import prefetch_prompts
+
+        prefetch_prompts([(smp["prompt"], smp["image_path"]) for smp in samples])
+
     for idx, sample in enumerate(samples):
         print_rank_0(f"[magi2] sample {idx+1}/{len(samples)}")
         seed = args.seed + idx

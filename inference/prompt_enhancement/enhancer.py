@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,10 +29,13 @@ PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
 
 # Example defaults used by :class:`OpenAICompatibleClient`. Leave ``API_KEY``
 # empty to skip PE. Replace with your own credentials / endpoint as needed.
-DEFAULT_MODEL = "gemini-3.1-pro-preview"
-API_KEY = ""
-DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-MAX_OUTPUT_TOKENS = 16384
+# Overridable without editing source: MAGI2_PE_MODEL / MAGI2_PE_API_KEY / MAGI2_PE_BASE_URL.
+DEFAULT_MODEL = os.environ.get("MAGI2_PE_MODEL", "gemini-3.1-pro-preview")
+API_KEY = os.environ.get("MAGI2_PE_API_KEY", "")
+DEFAULT_BASE_URL = os.environ.get(
+    "MAGI2_PE_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+MAX_OUTPUT_TOKENS = int(os.environ.get("MAGI2_PE_MAX_TOKENS", 16384))
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,13 @@ class OpenAICompatibleClient(LLMClient):
         self.client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
     def chat_completion(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
+        # Reasoning models (DeepSeek V3.1+/V4 behind vLLM) spend the max_tokens budget on
+        # their thinking phase and return empty or truncated content. ``MAGI2_PE_THINKING=1``
+        # keeps thinking on; the default asks the chat template to skip it.
+        if os.environ.get("MAGI2_PE_THINKING", "0") != "1":
+            kwargs.setdefault("extra_body", {}).setdefault("chat_template_kwargs", {})[
+                "thinking"
+            ] = False
         response = self.client.chat.completions.create(messages=messages, **kwargs)
         return response.choices[0].message.content or ""
 
@@ -143,32 +154,49 @@ class PromptEnhancer:
             .replace("{variation_seed}", "")
         )
 
+        # ``MAGI2_PE_CACHE=<dir>``: reuse the enhanced prompt across runs. PE samples from the
+        # LLM, so without this two runs of the same sample get different captions and cannot be
+        # compared latent-for-latent.
+        cache_dir = os.environ.get("MAGI2_PE_CACHE")
+        cache_path = None
+        if cache_dir:
+            import hashlib
+            key = hashlib.sha1((task.name + "\x00" + prompt + "\x00" + (image if isinstance(image, str) else "")).encode()).hexdigest()
+            cache_path = os.path.join(cache_dir, f"{key}.md")
+            if os.path.exists(cache_path):
+                print(f"[magi2 PE] cache hit {cache_path}")
+                return open(cache_path, encoding="utf-8").read()
         user_content: list[dict[str, Any]] = [{"type": "text", "text": pe_prompt}]
         if image is not None:
             user_content.append(
                 {"type": "image_url", "image_url": {"url": to_image_url(image)}}
             )
 
-        result_text = self.client.chat_completion(
-            messages=[{"role": "user", "content": user_content}],
-            model=self.model,
-            max_tokens=self.max_output_tokens,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": task.response_schema_name,
-                    "schema": task.response_schema,
-                    "strict": True,
+        retries = int(os.environ.get("MAGI2_PE_RETRIES", 3))
+        for attempt in range(1, retries + 1):
+            result_text = self.client.chat_completion(
+                messages=[{"role": "user", "content": user_content}],
+                model=self.model,
+                max_tokens=self.max_output_tokens,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": task.response_schema_name,
+                        "schema": task.response_schema,
+                        "strict": True,
+                    },
                 },
-            },
-        )
-
-        try:
-            pe_result = json.loads(result_text)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Failed to parse {task.name} PE JSON: {exc}, response: {result_text}"
-            ) from exc
+            )
+            try:
+                pe_result = json.loads(result_text)
+                break
+            except json.JSONDecodeError as exc:
+                # Long captions can hit max_tokens mid-string; the sample is random, so retry.
+                print(f"[magi2 PE] attempt {attempt}/{retries}: invalid JSON ({exc}); {len(result_text)} chars")
+                if attempt == retries:
+                    raise ValueError(
+                        f"Failed to parse {task.name} PE JSON: {exc}, response: {result_text}"
+                    ) from exc
         if not isinstance(pe_result, dict):
             raise ValueError(f"{task.name} PE response must be a JSON object")
         missing = [key for key in task.required_top_level_keys if key not in pe_result]
@@ -177,7 +205,7 @@ class PromptEnhancer:
                 f"{task.name} PE response missing required fields {missing}: {result_text}"
             )
 
-        return render_markdown(
+        rendered = render_markdown(
             data=pe_result,
             drop_empty=True,
             keep_empty_string=False,
@@ -185,9 +213,43 @@ class PromptEnhancer:
             quote_strings=False,
             collapse_string_whitespace=False,
         )
+        if cache_path:
+            os.makedirs(cache_dir, exist_ok=True)
+            with open(cache_path, "w", encoding="utf-8") as f:
+                f.write(rendered)
+            print(f"[magi2 PE] cached {cache_path}")
+        return rendered
 
 
 _default_enhancer: Optional[PromptEnhancer] = None
+
+
+_prefetched: dict = {}
+_prefetch_pool = None
+
+
+def _pe_key(prompt: str, image) -> tuple:
+    return (prompt, image if isinstance(image, (str, type(None))) else id(image))
+
+
+def prefetch_prompts(samples: list[tuple[str, Optional[str]]]) -> None:
+    """Queue PE for upcoming samples on ONE background worker (one request in flight at a
+    time, so the shared LLM endpoint sees no more load than before). ``enhance_prompt``
+    then returns the finished result instead of blocking the GPUs for the PE round trip
+    (~40 s per sample against the B-side DeepSeek)."""
+    global _prefetch_pool, _default_enhancer
+    if not API_KEY or os.environ.get("MAGI2_PE_PREFETCH", "1") != "1":
+        return
+    from concurrent.futures import ThreadPoolExecutor
+
+    if _default_enhancer is None:
+        _default_enhancer = PromptEnhancer()
+    if _prefetch_pool is None:
+        _prefetch_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="magi2-pe")
+    for prompt, image in samples:
+        key = _pe_key(prompt, image)
+        if key not in _prefetched:
+            _prefetched[key] = _prefetch_pool.submit(_default_enhancer.enhance, prompt, image)
 
 
 def enhance_prompt(prompt: str, image: Optional[str | Image.Image]) -> str:
@@ -197,6 +259,9 @@ def enhance_prompt(prompt: str, image: Optional[str | Image.Image]) -> str:
     """
     if not API_KEY:
         return prompt
+    fut = _prefetched.pop(_pe_key(prompt, image), None)
+    if fut is not None:
+        return fut.result()
     global _default_enhancer
     if _default_enhancer is None:
         _default_enhancer = PromptEnhancer()
