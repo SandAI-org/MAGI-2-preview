@@ -1,0 +1,15 @@
+# MAGI-2 preview image + MagiAttention FA4 (CuTe DSL) backend for Blackwell (B300, sm_103).
+FROM sandai/magi-2-preview:latest
+
+ARG FA_CUTE_REF=magi_attn_blackwell_support
+ENV TORCH_CUDA_ARCH_LIST="10.0;10.3" MAGI_ATTENTION_BUILD_COMPUTE_CAPABILITY=100
+
+RUN git clone --depth 1 -b ${FA_CUTE_REF} https://github.com/demonatic/flash-attention.git /opt/flash-attention-cute && \
+    cd /opt/flash-attention-cute && git log -1 --format="%H %cd" > /etc/fa-cute-build-info && \
+    bash install.sh
+
+# Prompt-enhancement client (listed in MAGI-2 requirements.txt but absent from the upstream image).
+RUN pip install --no-cache-dir "openai>=2.0.0"
+
+ENV MAGI_ATTENTION_KERNEL_BACKEND=fa4
+CMD ["bash"]

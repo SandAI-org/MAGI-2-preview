@@ -14,6 +14,7 @@
 
 from typing import Optional
 
+import os
 import torch
 import torch.nn.functional as F
 from diffusers.schedulers.scheduling_utils import SchedulerMixin
@@ -74,7 +75,18 @@ class Magi2PreviewSampler:
             total=len(sampler_input.video_t_list),
             disable=psm.get_global_rank() != 0,
         )
-        for t, video_cfg, audio_cfg in progress:
+        # MAGI2_PROFILE_STEPS=a-b: torch.profiler over denoise steps a..b (1-based, inclusive);
+        # rank 0 prints the CUDA kernel table and writes a chrome trace under MAGI_COMPILE_CACHE_ROOT_DIR.
+        _prof_env = os.environ.get("MAGI2_PROFILE_STEPS")
+        _prof_range = tuple(int(v) for v in _prof_env.split("-")) if _prof_env else None
+        _prof = None
+        for _step_idx, (t, video_cfg, audio_cfg) in enumerate(progress, start=1):
+            if _prof_range and _step_idx == _prof_range[0]:
+                from torch.profiler import ProfilerActivity, profile
+
+                torch.cuda.synchronize()
+                _prof = profile(activities=[ProfilerActivity.CUDA, ProfilerActivity.CPU], record_shapes=False)
+                _prof.__enter__()
             model_input = self.prepare_model_input(
                 latent=latent,
                 audio_latent=audio_latent,
@@ -101,6 +113,16 @@ class Magi2PreviewSampler:
                 t,
                 cfg_config=sampler_input.cfg_config,
             )
+            if _prof is not None and _step_idx == _prof_range[1]:
+                torch.cuda.synchronize()
+                _prof.__exit__(None, None, None)
+                if psm.get_global_rank() == 0:
+                    n = _prof_range[1] - _prof_range[0] + 1
+                    print(f"[magi2 profile] CUDA kernels over {n} preview step(s), rank 0:")
+                    print(_prof.key_averages().table(sort_by="cuda_time_total", row_limit=40, max_name_column_width=90))
+                    out_dir = os.environ.get("MAGI_COMPILE_CACHE_ROOT_DIR", "/tmp")
+                    _prof.export_chrome_trace(os.path.join(out_dir, "preview_steps_trace.json.gz"))
+                _prof = None
 
         return latent, audio_latent
 

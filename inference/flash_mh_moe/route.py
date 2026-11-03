@@ -14,8 +14,12 @@
 
 from typing import Literal, TypeAlias
 
+import os
+
 import torch
 import torch.nn.functional as F
+import triton
+import triton.language as tl
 
 TopKScoreFunc: TypeAlias = Literal["softmax", "sigmoid"]
 
@@ -154,6 +158,55 @@ score_func_name2id_map = {
 }
 
 
+@triton.jit
+def _route_sigmoid_topk_kernel(l_ptr, b_ptr, p_ptr, i_ptr, S, eps, E: tl.constexpr, K: tl.constexpr,
+                               HAS_BIAS: tl.constexpr, NORM: tl.constexpr):
+    r = tl.program_id(0).to(tl.int64)  # row of the (H*S, E) logits
+    h = r // S
+    e = tl.arange(0, E)
+    score = tl.sigmoid(tl.load(l_ptr + r * E + e))
+    sel = score
+    if HAS_BIAS:
+        sel = score + tl.load(b_ptr + h * E + e)
+    total = 0.0
+    for k in tl.static_range(K):
+        m = tl.max(sel, axis=0)
+        idx = tl.min(tl.where(sel == m, e, E), axis=0)  # lowest index among ties
+        p = tl.sum(tl.where(e == idx, score, 0.0), axis=0)
+        tl.store(i_ptr + r * K + k, idx.to(tl.int64))
+        tl.store(p_ptr + r * K + k, p)
+        total += p
+        sel = tl.where(e == idx, float("-inf"), sel)
+    if NORM:
+        inv = 1.0 / tl.maximum(total, eps)
+        for k in tl.static_range(K):
+            p = tl.load(p_ptr + r * K + k)
+            tl.store(p_ptr + r * K + k, p * inv)
+
+
+def _route_kernel_enabled() -> bool:
+    v = os.environ.get("MAGI2_ROUTE_KERNEL")
+    if v:
+        return v.strip().lower() == "triton"
+    return torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
+
+
+def _compute_topk_sigmoid_triton(router_logits, top_k, expert_bias, route_norm, norm_eps):
+    """One pass per (head, token) row: sigmoid, +bias for selection, top-k (descending, ties to
+    the lowest index), probs from the unbiased scores, L1-normalised. Same outputs as the torch
+    path except for exact ties, which torch.topk breaks arbitrarily."""
+    H, S, E = router_logits.shape
+    logits = router_logits.contiguous().view(H * S, E)
+    probs = torch.empty(H, S, top_k, device=logits.device, dtype=torch.float32)
+    indices = torch.empty(H, S, top_k, device=logits.device, dtype=torch.int64)
+    bias = expert_bias.contiguous().float() if expert_bias is not None else logits
+    _route_sigmoid_topk_kernel[(H * S,)](
+        logits, bias, probs, indices, S, float(norm_eps), E=E, K=top_k,
+        HAS_BIAS=expert_bias is not None, NORM=route_norm, num_warps=2,
+    )
+    return probs, indices
+
+
 def compute_topk_probs_and_indices(
     router_logits: torch.Tensor,
     top_k: int,
@@ -187,6 +240,15 @@ def compute_topk_probs_and_indices(
             - topk_indices: Tensor of shape [H, S, top_k],
                 the indices of the top-k experts for each head and token.
     """
+    if (
+        score_func == "sigmoid"
+        and num_virtual_group <= 1
+        and router_logits.is_cuda
+        and router_logits.dtype == torch.float32
+        and (router_logits.size(-1) & (router_logits.size(-1) - 1)) == 0
+        and _route_kernel_enabled()
+    ):
+        return _compute_topk_sigmoid_triton(router_logits, top_k, expert_bias, route_norm, norm_eps)
     return _compute_topk_probs_and_indices_torch_impl(
         router_logits=router_logits,
         top_k=top_k,
@@ -210,9 +272,11 @@ def flash_mh_moe_global_sort(
     topk_probs: torch.Tensor,
     topk_indices: torch.Tensor,
     num_experts: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    return_order: bool = False,
+):
     """
     Map per-head expert ids to global [0, H*E) and argsort into CSR format.
+    With ``return_order`` the stable argsort permutation (T,) is returned as a 4th value.
 
     Args:
         topk_probs (torch.Tensor): Routing probabilities with shape ``(H, S, K)``.
@@ -250,4 +314,6 @@ def flash_mh_moe_global_sort(
     expert_offsets = torch.zeros(H * E + 1, device=device, dtype=torch.long)
     expert_offsets[1:] = expert_counts.cumsum(0)
 
+    if return_order:
+        return gather_ids, probs_sorted, expert_offsets, sorted_order
     return gather_ids, probs_sorted, expert_offsets

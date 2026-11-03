@@ -33,6 +33,7 @@ import triton.language as tl
 from einops import rearrange, repeat
 from flash_attn_interface import flash_attn_3_cuda
 from magi_attn_extensions.fa3_interface_with_sink import (
+    FA3FuncWithSink,
     FA3VarlenFuncWithSink,
     fa3_func_with_sink,
     fa3_varlen_func_with_sink,
@@ -2097,6 +2098,90 @@ def _attention_sinks_for_cp(
     ].contiguous()
 
 
+
+def _is_hopper(device: torch.device) -> bool:
+    return torch.cuda.get_device_capability(device)[0] == 9
+
+
+def _preview_attn_backend() -> str:
+    """``MAGI2_PREVIEW_ATTN``: ``fa4`` (MagiAttention FA4 backend, 3.3x FA2 on B300 at 40-100k
+    tokens) or ``fa2``. Defaults to fa4 when MagiAttention is built with that backend."""
+    b = os.environ.get("MAGI2_PREVIEW_ATTN")
+    if b:
+        return b.strip().lower()
+    return "fa4" if os.environ.get("MAGI_ATTENTION_KERNEL_BACKEND", "").lower() == "fa4" else "fa2"
+
+
+def _fa4_ranges_attn(q, k, v, cu_seqlens_q, cu_seqlens_k):
+    """Dense attention per (q, k) sequence pair via MagiAttention FA4; returns out (T,H,D) and lse (T,H)."""
+    from magi_attention.api import flex_flash_attn_func
+
+    q_ranges = torch.stack([cu_seqlens_q[:-1], cu_seqlens_q[1:]], dim=1).to(torch.int32).contiguous()
+    k_ranges = torch.stack([cu_seqlens_k[:-1], cu_seqlens_k[1:]], dim=1).to(torch.int32).contiguous()
+    attn_type_map = torch.zeros(q_ranges.shape[0], dtype=torch.int32, device=q.device)
+    out, meta = flex_flash_attn_func(q, k, v, q_ranges, k_ranges, attn_type_map)
+    return out, meta.lse
+
+
+def _fa2_varlen_with_sink(q, k, v, *, cu_seqlens_q, cu_seqlens_k, max_seqlen_q,
+                          max_seqlen_k, softcap, sink, sink_layout, deterministic):
+    """FA3 is sm_90a-only. On Blackwell use FA4 (MagiAttention) or FA2 (sm_100 cubins) + the FA3 sink correction."""
+    from flash_attn import flash_attn_varlen_func as fa2_varlen_func
+
+    if _preview_attn_backend() == "fa4" and not (softcap and softcap > 0):
+        out, lse = _fa4_ranges_attn(q, k, v, cu_seqlens_q, cu_seqlens_k)
+        out, _ = FA3VarlenFuncWithSink.correct_out_lse_with_sink(
+            out=out, lse=lse.t().contiguous(), sink=sink, sink_layout=sink_layout
+        )
+        return out
+
+    out, softmax_lse, _ = fa2_varlen_func(
+        q, k, v,
+        cu_seqlens_q.contiguous(), cu_seqlens_k.contiguous(),
+        max_seqlen_q, max_seqlen_k,
+        softmax_scale=q.shape[-1] ** -0.5,
+        causal=False,
+        softcap=softcap,
+        deterministic=deterministic,
+        return_attn_probs=True,
+    )
+    out, _ = FA3VarlenFuncWithSink.correct_out_lse_with_sink(
+        out=out, lse=softmax_lse, sink=sink, sink_layout=sink_layout
+    )
+    return out
+
+
+def _fa2_dense_with_sink(q, k, v, *, softcap, sink, sink_layout, deterministic):
+    from flash_attn import flash_attn_func as fa2_func
+
+    if _preview_attn_backend() == "fa4" and not (softcap and softcap > 0):
+        B, S, H, D = q.shape
+        Sk = k.shape[1]
+        cu_q = torch.arange(0, (B + 1) * S, S, dtype=torch.int32, device=q.device)
+        cu_k = torch.arange(0, (B + 1) * Sk, Sk, dtype=torch.int32, device=q.device)
+        out, lse = _fa4_ranges_attn(q.reshape(B * S, H, D), k.reshape(B * Sk, H, D),
+                                    v.reshape(B * Sk, H, D), cu_q, cu_k)
+        out = out.view(B, S, H, D)
+        lse = lse.view(B, S, H).permute(0, 2, 1).contiguous()  # FA2 dense layout (B, H, S)
+        out, _ = FA3FuncWithSink.correct_out_lse_with_sink(
+            out=out, lse=lse, sink=sink, sink_layout=sink_layout
+        )
+        return out
+
+    out, softmax_lse, _ = fa2_func(
+        q, k, v,
+        softmax_scale=q.shape[-1] ** -0.5,
+        causal=False,
+        softcap=softcap,
+        deterministic=deterministic,
+        return_attn_probs=True,
+    )
+    out, _ = FA3FuncWithSink.correct_out_lse_with_sink(
+        out=out, lse=softmax_lse, sink=sink, sink_layout=sink_layout
+    )
+    return out
+
+
 def _fa3_varlen_func_with_sink_inference(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -2111,6 +2196,12 @@ def _fa3_varlen_func_with_sink_inference(
     sink_layout: str,
     deterministic: bool = False,
 ) -> torch.Tensor:
+    if not _is_hopper(q.device):
+        return _fa2_varlen_with_sink(
+            q, k, v, cu_seqlens_q=cu_seqlens_q, cu_seqlens_k=cu_seqlens_k,
+            max_seqlen_q=max_seqlen_q, max_seqlen_k=max_seqlen_k, softcap=softcap,
+            sink=sink, sink_layout=sink_layout, deterministic=deterministic,
+        )
     if torch.is_grad_enabled():
         return fa3_varlen_func_with_sink(
             q,
@@ -2207,6 +2298,14 @@ def _flash_attn_with_sink_impl(
             sink_layout="sh",
             deterministic=os.environ.get("MAGI2_DETERMINISTIC", "0") == "1",
         )
+    elif not _is_hopper(q.device):
+        out = _fa2_dense_with_sink(
+            q.unsqueeze(0), k.unsqueeze(0), v.unsqueeze(0),
+            softcap=attn_softcap,
+            sink=attn_sinks.unsqueeze(0) if attn_sinks is not None else None,
+            sink_layout="sh",
+            deterministic=os.environ.get("MAGI2_DETERMINISTIC", "0") == "1",
+        ).squeeze(0)
     else:
         out = fa3_func_with_sink(
             q.unsqueeze(0),
@@ -2585,6 +2684,31 @@ class CoreMultiHeadMoE(nn.Module):
                 self.W_up.zero_()
                 self.W_down.zero_()
 
+    def pack_experts_nvfp4(self, device: torch.device | str) -> int:
+        """``MAGI2_EXPERT_QUANT=fp4``: replace the bf16 W_gate/W_up/W_down parameters by NVFP4
+        packed buffers on ``device`` (4.5 bits/weight; see flash_mh_moe/nvfp4_pack.py). Called
+        after load_state_dict and before the model moves to the GPU, so the bf16 experts never
+        live on the device. Returns the packed byte count."""
+        from inference.flash_mh_moe.nvfp4_pack import FP4Experts, pack_nvfp4
+
+        total = 0
+        for name in ("W_gate", "W_up", "W_down"):
+            w = self._parameters.pop(name)
+            G, K, N = w.shape
+            fp4 = torch.empty(G, N, K // 2, dtype=torch.uint8, device=device)
+            sf = torch.empty(G, N, K // 16, dtype=torch.float8_e4m3fn, device=device)
+            gs = torch.empty(G, dtype=torch.float32, device=device)
+            step = 128
+            with torch.no_grad():
+                for e0 in range(0, G, step):
+                    f, s, g_ = pack_nvfp4(w[e0 : e0 + step].to(device))
+                    fp4[e0 : e0 + step], sf[e0 : e0 + step], gs[e0 : e0 + step] = f, s, g_
+            del w
+            packed = FP4Experts(fp4, sf, gs)
+            object.__setattr__(self, name, packed)
+            total += packed.nbytes()
+        return total
+
     def _route(self, x_heads: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         num_heads = x_heads.size(1)
         gate = self.gate.view(num_heads, self.num_experts, self.d_head).float()
@@ -2606,10 +2730,11 @@ class CoreMultiHeadMoE(nn.Module):
         topk_probs: torch.Tensor,
         topk_indices: torch.Tensor,
     ) -> torch.Tensor:
-        gather_ids, probs, expert_offsets = _mh_moe_global_sort(
+        gather_ids, probs, expert_offsets, sorted_order = _mh_moe_global_sort(
             topk_probs=topk_probs,
             topk_indices=topk_indices,
             num_experts=self.num_experts,
+            return_order=True,
         )
         return _mh_moe_fwd(
             x=x_heads,
@@ -2619,6 +2744,7 @@ class CoreMultiHeadMoE(nn.Module):
             W_gate=self.W_gate,
             W_up=self.W_up,
             W_down=self.W_down,
+            sorted_order=sorted_order,
         )
 
     def _forward_impl(self, x: torch.Tensor) -> torch.Tensor:

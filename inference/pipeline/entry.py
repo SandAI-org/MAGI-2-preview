@@ -188,6 +188,13 @@ def main():
             magi2_refiner_num_inference_steps=args.refiner_num_inference_steps,
         )
 
+    if os.environ.get("MAGI2_EXPORT_FA4_CACHE", "1") == "1" and (
+        not dist.is_initialized() or dist.get_rank() == 0
+    ):
+        from inference.utils.fa4_cache import export_ffa_fa4_cache
+
+        export_ffa_fa4_cache()
+
     if dist.is_initialized():
         dist.barrier()
         dist.destroy_process_group()
