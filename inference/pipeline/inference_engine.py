@@ -497,7 +497,16 @@ class Magi2InferenceEngine:
 
         torch.cuda.reset_peak_memory_stats()
         print_mem_info_rank_0("[magi2] before preview denoise")
-        latent, latent_audio = self.sampler.sample(sampler_input)
+        _latent_cache = os.environ.get("MAGI2_PREVIEW_LATENT_CACHE")
+        if _latent_cache and os.path.exists(_latent_cache):
+            _c = torch.load(_latent_cache, map_location="cuda")
+            latent, latent_audio = _c["latent"], _c["latent_audio"]
+            print_rank_0(f"[magi2] preview latents LOADED from {_latent_cache} (preview denoise skipped)")
+        else:
+            latent, latent_audio = self.sampler.sample(sampler_input)
+            if _latent_cache and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0):
+                torch.save({"latent": latent, "latent_audio": latent_audio}, _latent_cache)
+                print_rank_0(f"[magi2] preview latents SAVED to {_latent_cache}")
         print_mem_info_rank_0("[magi2] after preview denoise")
 
         OffloadUtils.maybe_offload(self.model, self._preview_mode)
