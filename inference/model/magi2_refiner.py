@@ -30,6 +30,7 @@ from typing import (
 )
 
 import torch
+import torch.distributed
 import torch.nn as nn
 from einops import rearrange, repeat
 from flash_attn.layers.rotary import apply_rotary_emb
@@ -1173,7 +1174,7 @@ def is_hopper_arch() -> bool:
     if not torch.cuda.is_available():
         return False
     major, _ = torch.cuda.get_device_capability()
-    return major >= 9
+    return major == 9  # sm_90a kernels (FA3, MagiAttention FFA) do not run on Blackwell
 
 
 @magi_register_custom_op(
@@ -1310,13 +1311,43 @@ def flex_flash_attn_func(
     auto_range_merge: bool = False,
     sparse_load: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if HAS_MAGI_ATTENTION and is_hopper_arch():
+    # MagiAttention FFA is sm_90a-only; its FA4 (CuTe DSL) backend covers Blackwell.
+    use_magi = HAS_MAGI_ATTENTION and (
+        is_hopper_arch() or os.environ.get("MAGI_ATTENTION_KERNEL_BACKEND", "ffa").lower() == "fa4"
+    )
+    _dump_dir = os.environ.get("MAGI2_DUMP_RANGES")
+    if _dump_dir and not is_hopper_arch():
+        global _RANGE_DUMP_N
+        try:
+            _RANGE_DUMP_N
+        except NameError:
+            _RANGE_DUMP_N = 0
+        if _RANGE_DUMP_N < 64 and torch.distributed.get_rank() == 0:
+            os.makedirs(_dump_dir, exist_ok=True)
+            torch.save(
+                {"q_ranges": q_ranges.cpu(), "k_ranges": k_ranges.cpu(),
+                 "attn_type_map": None if attn_type_map is None else attn_type_map.cpu(),
+                 "q_shape": tuple(query.shape), "k_shape": tuple(key.shape),
+                 "max_seqlen_q": max_seqlen_q, "auto_range_merge": auto_range_merge},
+                os.path.join(_dump_dir, f"ranges_{_RANGE_DUMP_N:03d}.pt"),
+            )
+            _RANGE_DUMP_N += 1
+    # Non-Hopper: MagiAttention FFA is sm_90a-only and its FA4 backend builds a dense
+    # (n_ranges x seqlen) table (1.5 TB at 1080p), so default to FA2 varlen over the
+    # ranges (inference/model/blocksparse_fa2.py). MAGI2_REFINER_ATTN=fa4 opts back in.
+    if not is_hopper_arch() and os.environ.get("MAGI2_REFINER_ATTN", "fa2").lower() != "fa4":
+        from .blocksparse_fa2 import range_sparse_attn_fa2
+
+        return range_sparse_attn_fa2(query, key, value, q_ranges, k_ranges)
+    if use_magi:
         from magi_attention.api import flex_flash_attn_func as magi_flex_flash_attn_func
 
-        kwargs = _adapt_magi_attn_kwargs(
-            magi_flex_flash_attn_func,
-            {"max_seqlen_q": max_seqlen_q, "auto_range_merge": auto_range_merge, "sparse_load": sparse_load},
-        )
+        if is_hopper_arch():
+            extra = {"max_seqlen_q": max_seqlen_q, "auto_range_merge": auto_range_merge, "sparse_load": sparse_load}
+        else:
+            # The FA4 (Blackwell) backend rejects these FFA-only tuning hints; they do not change results.
+            extra = {}
+        kwargs = _adapt_magi_attn_kwargs(magi_flex_flash_attn_func, extra)
         output, meta = magi_flex_flash_attn_func(
             query, key, value, q_ranges, k_ranges, attn_type_map, **kwargs
         )

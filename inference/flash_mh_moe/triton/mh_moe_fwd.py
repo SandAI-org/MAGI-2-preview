@@ -9,6 +9,7 @@ Supports deterministic mode (sequential scatter_back) for bit-exact reproducibil
 from __future__ import annotations
 
 import math
+import os
 
 import torch
 import triton
@@ -222,8 +223,15 @@ def _scatter_back(
 
 def _select_block_config() -> tuple[int, int, int, int, int]:
     """(BLOCK_T, BLOCK_DH, BLOCK_DE, NUM_STAGES, NUM_WARPS) for d_head=256."""
+    override = os.environ.get("MAGI2_MOE_BLOCK_CONFIG")
+    if override:
+        return tuple(int(v) for v in override.split(","))
     major, _ = torch.cuda.get_device_capability()
     if major >= 10:  # Blackwell
+        # Needs Triton >= 3.9 on sm_103: 3.5-3.7 either fail MLIR lowering of the nested tl.dot
+        # loop or exceed the 512-column tensor memory budget with this tile (528). With older
+        # Triton use MAGI2_MOE_BACKEND=grouped_mm (the default on Blackwell) or override
+        # MAGI2_MOE_BLOCK_CONFIG=64,64,32,1,4.
         return (128, 64, 32, 2, 8)
     return (128, 64, 32, 2, 8)  # Hopper
 
