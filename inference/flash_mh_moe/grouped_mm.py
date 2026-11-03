@@ -42,6 +42,14 @@ _SCATTER = os.environ.get("MAGI2_MOE_SCATTER", "inv").strip().lower()
 # groups"). EP=2 puts 6 heads x 256 experts = 1536 groups on a rank, so slice by group.
 _MAX_GROUPS = int(os.environ.get("MAGI2_GMM_MAX_GROUPS", 768))  # cuBLAS limit is < 1024
 
+
+def _wslice(W, g0: int, g1: int) -> torch.Tensor:
+    """Expert weights for groups [g0, g1): a slice of the bf16 tensor, or a bf16 dequant of
+    NVFP4-packed experts (``nvfp4_pack.FP4Experts``, ``MAGI2_EXPERT_QUANT=fp4``)."""
+    if isinstance(W, torch.Tensor):
+        return W[g0:g1]
+    return W.dequant(g0, g1)
+
 _ACT_BLOCK = 4096
 
 
@@ -135,12 +143,12 @@ def mh_moe_fwd_grouped_mm(
     offs = expert_offsets[1:].to(torch.int32)  # cumulative group ends
 
     if G <= _MAX_GROUPS:
-        gate = torch._grouped_mm(x_sorted, W_gate, offs=offs)
-        up = torch._grouped_mm(x_sorted, W_up, offs=offs)
+        gate = torch._grouped_mm(x_sorted, _wslice(W_gate, 0, G), offs=offs)
+        up = torch._grouped_mm(x_sorted, _wslice(W_up, 0, G), offs=offs)
         del x_sorted
         hidden = _swiglu7(gate, up)
         del gate, up
-        out = torch._grouped_mm(hidden, W_down, offs=offs)
+        out = torch._grouped_mm(hidden, _wslice(W_down, 0, G), offs=offs)
         del hidden
     else:
         # Run each group chunk end to end: the (rows, d_expert) gate/up/hidden tensors stay
@@ -151,11 +159,11 @@ def mh_moe_fwd_grouped_mm(
                 continue
             xs = x_sorted[row0:row1]
             o = (offs[g0:g1] - row0).contiguous()
-            gate = torch._grouped_mm(xs, W_gate[g0:g1], offs=o)
-            up = torch._grouped_mm(xs, W_up[g0:g1], offs=o)
+            gate = torch._grouped_mm(xs, _wslice(W_gate, g0, g1), offs=o)
+            up = torch._grouped_mm(xs, _wslice(W_up, g0, g1), offs=o)
             hidden = _swiglu7(gate, up)
             del gate, up
-            out[row0:row1] = torch._grouped_mm(hidden, W_down[g0:g1], offs=o)
+            out[row0:row1] = torch._grouped_mm(hidden, _wslice(W_down, g0, g1), offs=o)
             del hidden
         del x_sorted
 

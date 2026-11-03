@@ -2684,6 +2684,31 @@ class CoreMultiHeadMoE(nn.Module):
                 self.W_up.zero_()
                 self.W_down.zero_()
 
+    def pack_experts_nvfp4(self, device: torch.device | str) -> int:
+        """``MAGI2_EXPERT_QUANT=fp4``: replace the bf16 W_gate/W_up/W_down parameters by NVFP4
+        packed buffers on ``device`` (4.5 bits/weight; see flash_mh_moe/nvfp4_pack.py). Called
+        after load_state_dict and before the model moves to the GPU, so the bf16 experts never
+        live on the device. Returns the packed byte count."""
+        from inference.flash_mh_moe.nvfp4_pack import FP4Experts, pack_nvfp4
+
+        total = 0
+        for name in ("W_gate", "W_up", "W_down"):
+            w = self._parameters.pop(name)
+            G, K, N = w.shape
+            fp4 = torch.empty(G, N, K // 2, dtype=torch.uint8, device=device)
+            sf = torch.empty(G, N, K // 16, dtype=torch.float8_e4m3fn, device=device)
+            gs = torch.empty(G, dtype=torch.float32, device=device)
+            step = 128
+            with torch.no_grad():
+                for e0 in range(0, G, step):
+                    f, s, g_ = pack_nvfp4(w[e0 : e0 + step].to(device))
+                    fp4[e0 : e0 + step], sf[e0 : e0 + step], gs[e0 : e0 + step] = f, s, g_
+            del w
+            packed = FP4Experts(fp4, sf, gs)
+            object.__setattr__(self, name, packed)
+            total += packed.nbytes()
+        return total
+
     def _route(self, x_heads: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         num_heads = x_heads.size(1)
         gate = self.gate.view(num_heads, self.num_experts, self.d_head).float()

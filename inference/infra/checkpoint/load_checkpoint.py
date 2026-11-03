@@ -15,6 +15,7 @@
 """Checkpoint loading for MAGI-2 models."""
 
 import gc
+import os
 
 import torch
 
@@ -50,6 +51,14 @@ def load_magi2_model(config: Magi2Config) -> torch.nn.Module:
 
         del state_dict
         gc.collect()
+
+    if os.environ.get("MAGI2_EXPERT_QUANT", "").strip().lower() == "fp4":
+        from inference.model.magi2_preview import CoreMultiHeadMoE
+
+        dev = f"cuda:{torch.cuda.current_device()}"
+        nbytes = sum(m.pack_experts_nvfp4(dev) for m in model.modules() if isinstance(m, CoreMultiHeadMoE))
+        gc.collect()
+        print_rank_0(f"[magi2] experts packed to NVFP4: {nbytes / 2**30:.1f} GB on {dev}")
 
     model = model.to(f"cuda:{torch.cuda.current_device()}")
     model.eval()
